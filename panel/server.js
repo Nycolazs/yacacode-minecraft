@@ -15,6 +15,7 @@ import { createAiAssistant } from './lib/ai.js';
 import { createAiHistoryStore } from './lib/ai-history.js';
 import { createGoogleDriveBackupManager } from './lib/gdrive.js';
 import { createInGameChatBridge } from './lib/ingame-chat.js';
+import { createCrossplaySyncManager } from './lib/crossplay-sync.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -585,6 +586,20 @@ const inGameChat = createInGameChatBridge({
   getWorldContext: buildInGameWorldContext,
 });
 inGameChat.start();
+
+const crossplaySync = createCrossplaySyncManager({
+  dataDir: CONFIG.dataDir,
+  docker,
+  containerName: CONFIG.mcContainerName,
+  sendMcCommand,
+  fetchOnlinePlayers: async () => {
+    const rconList = await fetchOnlinePlayersViaRcon().catch(() => null);
+    if (rconList?.players) return rconList.players;
+    const ping = await pingMinecraftServer(CONFIG.rconHost, 25565, 2000).catch(() => null);
+    return ping?.players?.sample || [];
+  },
+});
+crossplaySync.start();
 
 // Coletor leve em segundo plano para gráficos de telemetria (a cada 15s)
 let lastMcStats = null;
@@ -1432,11 +1447,13 @@ process.on('SIGTERM', () => {
   clearInterval(telemetryTimer);
   gdrive.stopScheduler();
   inGameChat.stop();
+  crossplaySync.stop();
   server.close(() => process.exit(0));
 });
 process.on('SIGINT', () => {
   clearInterval(telemetryTimer);
   gdrive.stopScheduler();
   inGameChat.stop();
+  crossplaySync.stop();
   server.close(() => process.exit(0));
 });

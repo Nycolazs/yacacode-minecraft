@@ -20,6 +20,12 @@ import {
   buildTellrawCommand,
 } from '../lib/ingame-chat.js';
 import {
+  normalizeCrossplayKey,
+  computeOfflineJavaUuid,
+  parseJoinLeaveLine,
+  createCrossplaySyncManager,
+} from '../lib/crossplay-sync.js';
+import {
   resolveSafePath,
   parseServerProperties,
   updateServerProperties,
@@ -743,6 +749,85 @@ test('In-Game AI Chat (Jorge): parser Pumpkin/Vanilla, só responde quando chama
     assert.equal(capturedBody.tools, undefined);
     assert.match(capturedBody.systemInstruction.parts[0].text, /-1596/);
     assert.match(capturedBody.systemInstruction.parts[0].text, /YacaWorld/);
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('Crossplay Sync (Java <-> Bedrock): bloqueio simultâneo e espelhamento completo de .dat/stats/advancements', async () => {
+  assert.equal(normalizeCrossplayKey('Nycolazs'), 'nycolazs');
+  assert.equal(normalizeCrossplayKey('.Nycolazs'), 'nycolazs');
+  assert.deepEqual(parseJoinLeaveLine('15:51:28  INFO Nycolazs joined the game'), { type: 'join', player: 'Nycolazs' });
+  assert.deepEqual(parseJoinLeaveLine('15:52:01  INFO .Nycolazs left the game'), { type: 'leave', player: '.Nycolazs' });
+
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'yc-crossplay-'));
+  const javaUuid = computeOfflineJavaUuid('Nycolazs');
+  const bedrockUuid = '06eaeacf-306a-3dff-ab87-b6042cfcc3e1';
+
+  fs.mkdirSync(path.join(tmpRoot, 'data'), { recursive: true });
+  fs.mkdirSync(path.join(tmpRoot, 'world/players/data'), { recursive: true });
+  fs.mkdirSync(path.join(tmpRoot, 'world/players/stats'), { recursive: true });
+  fs.mkdirSync(path.join(tmpRoot, 'world/players/advancements'), { recursive: true });
+
+  fs.writeFileSync(
+    path.join(tmpRoot, 'data/usercache.json'),
+    JSON.stringify([
+      { uuid: javaUuid, name: 'Nycolazs' },
+      { uuid: bedrockUuid, name: '.Nycolazs' },
+    ])
+  );
+  fs.writeFileSync(path.join(tmpRoot, `world/players/data/${javaUuid}.dat`), 'JAVA_ITEMS_ARMOR_POS_V1');
+  fs.writeFileSync(path.join(tmpRoot, `world/players/stats/${javaUuid}.json`), '{"play":100}');
+  fs.writeFileSync(path.join(tmpRoot, `world/players/advancements/${javaUuid}.json`), '{"adv":1}');
+
+  const sentCmds = [];
+  try {
+    const sync = createCrossplaySyncManager({
+      dataDir: tmpRoot,
+      docker: { isAvailable: () => false },
+      containerName: 'yacacode-mc',
+      sendMcCommand: async (c) => {
+        sentCmds.push(c);
+        return '';
+      },
+      saveSettleDelayMs: 0,
+    });
+
+    // 1. Nycolazs entra no Java
+    const j1 = await sync._handleJoinForTest('Nycolazs');
+    assert.equal(j1.action, 'joined');
+
+    // 2. .Nycolazs tenta entrar no Bedrock ao mesmo tempo -> BLOQUEADO com kick!
+    const j2 = await sync._handleJoinForTest('.Nycolazs');
+    assert.equal(j2.action, 'blocked_duplicate');
+    assert.match(sentCmds[0], /^kick \.Nycolazs /);
+
+    // 3. Leave subsequente do .Nycolazs kickado NÃO sobrescreve nada
+    fs.writeFileSync(path.join(tmpRoot, `world/players/data/${bedrockUuid}.dat`), 'OLD_BEDROCK_STALE');
+    const lBlocked = await sync._handleLeaveForTest('.Nycolazs');
+    assert.equal(lBlocked.action, 'leave_suppressed');
+    assert.equal(fs.readFileSync(path.join(tmpRoot, `world/players/data/${javaUuid}.dat`), 'utf8'), 'JAVA_ITEMS_ARMOR_POS_V1');
+
+    // 4. Nycolazs desconecta do Java -> espelha .dat/stats/advancements para o Bedrock!
+    const lJava = await sync._handleLeaveForTest('Nycolazs');
+    assert.equal(lJava.action, 'synced_on_leave');
+    assert.equal(fs.readFileSync(path.join(tmpRoot, `world/players/data/${bedrockUuid}.dat`), 'utf8'), 'JAVA_ITEMS_ARMOR_POS_V1');
+    assert.equal(fs.readFileSync(path.join(tmpRoot, `world/players/stats/${bedrockUuid}.json`), 'utf8'), '{"play":100}');
+
+    // 5. Agora .Nycolazs entra no Bedrock (permitido!), joga e salva novo estado
+    const jBedrock = await sync._handleJoinForTest('.Nycolazs');
+    assert.equal(jBedrock.action, 'joined');
+
+    // 6. Enquanto .Nycolazs está no Bedrock, Java tenta entrar -> BLOQUEADO!
+    const jJavaDup = await sync._handleJoinForTest('Nycolazs');
+    assert.equal(jJavaDup.action, 'blocked_duplicate');
+    assert.match(sentCmds[1], /^kick Nycolazs /);
+
+    // 7. .Nycolazs sai do Bedrock com novos itens -> espelha de volta para o Java!
+    fs.writeFileSync(path.join(tmpRoot, `world/players/data/${bedrockUuid}.dat`), 'BEDROCK_DIAMONDS_POS_V2');
+    const lBedrock = await sync._handleLeaveForTest('.Nycolazs');
+    assert.equal(lBedrock.action, 'synced_on_leave');
+    assert.equal(fs.readFileSync(path.join(tmpRoot, `world/players/data/${javaUuid}.dat`), 'utf8'), 'BEDROCK_DIAMONDS_POS_V2');
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
