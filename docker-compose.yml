@@ -30,7 +30,7 @@ services:
     tty: false
     stdin_open: true
     stop_grace_period: 30s
-    mem_limit: ${MC_RUST_MEM_LIMIT:-768m}
+    mem_limit: ${MC_RUST_MEM_LIMIT:-1536m}
     ports:
       - "${MC_JAVA_PORT:-25565}:25565/tcp"       # Minecraft Java Edition (26.3)
       - "${MC_BEDROCK_PORT:-19132}:19132/udp"    # Minecraft Bedrock (NetherNet ICE WebRTC)
