@@ -32,7 +32,7 @@ services:
     stop_grace_period: 30s
     mem_limit: ${MC_RUST_MEM_LIMIT:-1536m}
     ports:
-      - "${MC_JAVA_PORT:-25565}:25565/tcp"       # Minecraft Java Edition (26.3)
+      # Java 25565/tcp agora é atendida pelo proxy Velocity (yacacode-velocity) na rede interna
       - "${MC_BEDROCK_PORT:-19132}:19132/udp"    # Minecraft Bedrock (NetherNet ICE WebRTC)
       - "${MC_BEDROCK_PORT:-19132}:19132/tcp"    # Minecraft Bedrock (NetherNet Signaling)
       - "7551:7551/udp"                          # Minecraft Bedrock (NetherNet LAN Discovery)
@@ -50,6 +50,33 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    logging: *default-logging
+
+  # ----------------------------------------------------------------------------
+  # 1A. PROXY VELOCITY 4.3 (SkinsRestorer + Plugins de Proxy na frente do Pumpkin)
+  # ----------------------------------------------------------------------------
+  velocity:
+    build:
+      context: ./velocity
+      dockerfile: Dockerfile
+    image: yacacode-velocity:latest
+    container_name: yacacode-velocity
+    restart: unless-stopped
+    stop_grace_period: 15s
+    mem_limit: 384m
+    ports:
+      - "${MC_JAVA_PORT:-25565}:25565/tcp"       # Minecraft Java Edition (via Velocity + SkinsRestorer)
+    environment:
+      TZ: "${TZ:-America/Fortaleza}"
+      VELOCITY_FORWARDING_SECRET: "${VELOCITY_FORWARDING_SECRET:-yacacode-velocity-secret}"
+    volumes:
+      - ./velocity/data:/server
+      - ./minecraft/data/plugins:/mc-plugins:ro
+      - ./minecraft/server-icon.png:/assets/server-icon.png:ro
+    networks:
+      - yacacode-net
+    depends_on:
+      - minecraft
     logging: *default-logging
 
   # ----------------------------------------------------------------------------

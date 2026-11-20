@@ -266,6 +266,7 @@ async function fetchOnlinePlayersViaRcon() {
 async function collectStackStatus() {
   const names = [
     { key: 'minecraft', container: CONFIG.mcContainerName, label: 'Minecraft Pumpkin (Rust)' },
+    { key: 'velocity', container: 'yacacode-velocity', label: 'Velocity Proxy (SkinsRestorer)' },
     { key: 'panel', container: 'yacacode-panel', label: 'Painel Admin YacaCode' },
     { key: 'cloudflared', container: CONFIG.cloudflaredContainerName, label: 'Cloudflare Tunnel' },
     { key: 'ddns', container: CONFIG.ddnsContainerName, label: 'Cloudflare DDNS' },

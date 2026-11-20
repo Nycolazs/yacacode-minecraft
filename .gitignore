@@ -10,6 +10,7 @@
 # Dados de produção do servidor Minecraft e backups locais
 minecraft/data/
 !minecraft/data/.gitkeep
+velocity/data/
 backups/
 !backups/.gitkeep
 *.tar.gz
