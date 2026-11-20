@@ -627,6 +627,39 @@ async function getCurrentOnlinePlayerNames() {
   return (ping?.players?.sample || []).map((p) => p.name);
 }
 
+async function getWhatsAppServerStatus() {
+  const [mcInfo, mcPing, rconList] = await Promise.all([
+    docker.isAvailable()
+      ? docker.inspectContainer(CONFIG.mcContainerName).catch(() => ({ running: false }))
+      : Promise.resolve({ running: false }),
+    pingMinecraftServer(CONFIG.rconHost, 25565, 2000).catch(() => ({ online: false })),
+    fetchOnlinePlayersViaRcon().catch(() => null),
+  ]);
+  const snap = system.getSnapshot();
+  const onlinePlayers = (rconList?.players || mcPing.players?.sample || []).map((p) => ({
+    name: p.name,
+    edition: String(p.name || '').startsWith('.') ? 'Bedrock' : 'Java',
+  }));
+  return {
+    serverName: CONFIG.serverName,
+    address: CONFIG.mcDomain,
+    javaPort: CONFIG.mcJavaPort,
+    bedrockPort: CONFIG.mcBedrockPort,
+    online: Boolean(mcInfo.running && (mcPing.online || rconList)),
+    containerRunning: Boolean(mcInfo.running),
+    startedAt: mcInfo.startedAt || null,
+    version: mcPing.version || CONFIG.mcVersion,
+    playersOnlineCount: rconList?.online ?? mcPing.players?.online ?? onlinePlayers.length,
+    maxPlayers: rconList?.max ?? mcPing.players?.max ?? 6,
+    onlinePlayers,
+    latencyMs: mcPing.latencyMs ?? null,
+    cpuPercent: lastMcStats?.cpuPercent ?? null,
+    ramUsedMB: lastMcStats?.memUsedBytes ? Math.round(lastMcStats.memUsedBytes / (1024 * 1024)) : null,
+    hostRamPercent: snap?.memory?.percent ?? null,
+    temperatureC: snap?.temperature?.celsius ?? null,
+  };
+}
+
 whatsapp = createWhatsAppManager({
   dataDir: CONFIG.dataDir,
   serviceUrl: CONFIG.whatsappServiceUrl,
@@ -634,39 +667,9 @@ whatsapp = createWhatsAppManager({
   serverName: CONFIG.serverName,
   mcDomain: CONFIG.mcDomain,
   getGeminiConfig: () => ai.getActiveGeminiConfig(),
+  getLiveSnapshot: getWhatsAppServerStatus,
   toolHandlers: {
-    get_server_status: async () => {
-      const [mcInfo, mcPing, rconList, hostMetrics] = await Promise.all([
-        docker.isAvailable()
-          ? docker.inspectContainer(CONFIG.mcContainerName).catch(() => ({ running: false }))
-          : Promise.resolve({ running: false }),
-        pingMinecraftServer(CONFIG.rconHost, 25565, 2000).catch(() => ({ online: false })),
-        fetchOnlinePlayersViaRcon().catch(() => null),
-        Promise.resolve(system.getHostMetrics()),
-      ]);
-      const onlinePlayers = (rconList?.players || mcPing.players?.sample || []).map((p) => ({
-        name: p.name,
-        edition: String(p.name || '').startsWith('.') ? 'Bedrock' : 'Java',
-      }));
-      return {
-        serverName: CONFIG.serverName,
-        address: CONFIG.mcDomain,
-        javaPort: CONFIG.mcJavaPort,
-        bedrockPort: CONFIG.mcBedrockPort,
-        online: Boolean(mcInfo.running && (mcPing.online || rconList)),
-        containerRunning: Boolean(mcInfo.running),
-        startedAt: mcInfo.startedAt || null,
-        version: mcPing.version || CONFIG.mcVersion,
-        playersOnlineCount: rconList?.online ?? mcPing.players?.online ?? onlinePlayers.length,
-        maxPlayers: rconList?.max ?? mcPing.players?.max ?? 6,
-        onlinePlayers,
-        latencyMs: mcPing.latencyMs ?? null,
-        cpuPercent: lastMcStats?.cpuPercent ?? null,
-        ramUsedMB: lastMcStats?.memoryUsedMB ?? null,
-        hostRamPercent: hostMetrics?.memory?.usedPercent ?? null,
-        temperatureC: hostMetrics?.temperatureC ?? null,
-      };
-    },
+    get_server_status: getWhatsAppServerStatus,
     get_server_report: async ({ days = 7 } = {}) => analytics.getReport(days),
     get_player_rankings: async ({ metric = 'all' } = {}) => {
       const onlineNames = await getCurrentOnlinePlayerNames();
@@ -751,14 +754,14 @@ async function pollTelemetry() {
     // Grava amostra consolidada no histórico de 30 dias a cada 15 minutos
     if (Date.now() - lastAnalyticsSampleAt >= 15 * 60 * 1000) {
       lastAnalyticsSampleAt = Date.now();
-      const host = system.getHostMetrics();
+      const snap = system.getSnapshot();
       const ping = mcRunning ? await pingMinecraftServer(CONFIG.rconHost, 25565, 1500).catch(() => null) : null;
       analytics.recordSample({
         online: mcRunning && Boolean(ping?.online ?? true),
         players: ping?.players?.online ?? 0,
         cpu: lastMcStats?.cpuPercent ?? null,
-        ram: host?.memory?.usedPercent ?? null,
-        temp: host?.temperatureC ?? null,
+        ram: snap?.memory?.percent ?? null,
+        temp: snap?.temperature?.celsius ?? null,
       });
     }
   } catch {
