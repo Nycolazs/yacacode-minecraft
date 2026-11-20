@@ -26,7 +26,12 @@ import {
   createCrossplaySyncManager,
 } from '../lib/crossplay-sync.js';
 import { createAnalyticsManager } from '../lib/analytics.js';
-import { createWhatsAppManager, isBotCalledInGroup, normalizePhoneList } from '../lib/whatsapp.js';
+import {
+  createWhatsAppManager,
+  isBotCalledInGroup,
+  normalizePhoneList,
+  formatForWhatsApp,
+} from '../lib/whatsapp.js';
 import {
   resolveSafePath,
   parseServerProperties,
@@ -956,11 +961,13 @@ test('Analytics & WhatsApp IA: relatórios de N dias, ranking consolidado Java+B
     assert.equal(deathsRanking.ranking[1].name, 'Nycolazs');
     assert.equal(deathsRanking.ranking[1].value, 12);
 
-    // 2) Helpers de gatilho e telefone
+    // 2) Helpers de gatilho, telefone e formatação WhatsApp
     assert.equal(isBotCalledInGroup('Jorge, quem morreu mais?', 'Jorge'), true);
     assert.equal(isBotCalledInGroup('e ai galera bora jogar', 'Jorge'), false);
     assert.equal(isBotCalledInGroup('qual o status?', 'Jorge', { isMentioningBot: true }), true);
+    assert.equal(isBotCalledInGroup('e agora?', 'Jorge', { isReplyToBot: true }), true);
     assert.deepEqual(normalizePhoneList('+55 (11) 99999-8888, 5585988887777'), ['5511999998888', '5585988887777']);
+    assert.equal(formatForWhatsApp('### Status\n**Online** agora'), '*Status*\n*Online* agora');
 
     // 3) WhatsApp Manager: Function Calling read-only + envio ao bridge mockado + notificação de backup
     const sentMessages = [];

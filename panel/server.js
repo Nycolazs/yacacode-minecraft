@@ -721,8 +721,28 @@ whatsapp = createWhatsAppManager({
         dayPhase: describeDayPhase(daytimeTicks),
       };
     },
+    get_recent_events: async () => {
+      if (!docker.isAvailable()) {
+        return { events: [], note: 'Docker indisponível.' };
+      }
+      const rawLogs = await docker.getContainerLogs(CONFIG.mcContainerName, 160).catch(() => '');
+      const cleanLines = stripMinecraftColors(rawLogs)
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean);
+      const interesting = cleanLines.filter((l) =>
+        /(joined the game|left the game|has made the advancement|has completed the challenge|was slain|fell from|drowned|burned|blew up|tried to swim in lava|hit the ground|starved|suffocated|withered|died)/i.test(
+          l
+        )
+      );
+      return {
+        eventsCount: interesting.length,
+        recentEvents: interesting.slice(-20),
+      };
+    },
   },
 });
+whatsapp.startScheduler();
 
 // Coletor leve em segundo plano para gráficos de telemetria (a cada 15s)
 let lastMcStats = null;
@@ -1620,6 +1640,12 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, result);
   }
 
+  if (pathname === '/api/whatsapp/daily-report' && method === 'POST') {
+    if (!requireRole('admin')) return;
+    const result = await whatsapp.sendDailyReportNow({ markSent: false });
+    return sendJson(res, 200, result);
+  }
+
   return sendJson(res, 404, { error: 'Rota da API não encontrada.' });
 }
 
@@ -1653,6 +1679,7 @@ process.on('SIGTERM', () => {
   inGameChat.stop();
   crossplaySync.stop();
   analytics.stop();
+  whatsapp.stopScheduler();
   server.close(() => process.exit(0));
 });
 process.on('SIGINT', () => {
@@ -1661,5 +1688,6 @@ process.on('SIGINT', () => {
   inGameChat.stop();
   crossplaySync.stop();
   analytics.stop();
+  whatsapp.stopScheduler();
   server.close(() => process.exit(0));
 });

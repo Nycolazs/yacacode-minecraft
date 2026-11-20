@@ -240,9 +240,31 @@ export function createAnalyticsManager({ dataDir }) {
     };
   }
 
+  function countPlayerAdvancements(uuid) {
+    if (!uuid) return 0;
+    const clean = String(uuid).toLowerCase();
+    for (const rel of [`world/players/advancements/${clean}.json`, `world/advancements/${clean}.json`]) {
+      const full = path.join(dataDir, rel);
+      if (!fs.existsSync(full)) continue;
+      try {
+        const obj = JSON.parse(fs.readFileSync(full, 'utf8'));
+        if (!obj || typeof obj !== 'object') return 0;
+        let count = 0;
+        for (const [key, val] of Object.entries(obj)) {
+          if (key === 'DataVersion' || key.startsWith('minecraft:recipes/')) continue;
+          if (val && val.done === true) count += 1;
+        }
+        return count;
+      } catch {
+        return 0;
+      }
+    }
+    return 0;
+  }
+
   /**
    * Consolida perfis de jogadores unificando contas Java + Bedrock (ex: Nycolazs e .Nycolazs)
-   * para evitar duplicidade nos rankings de mortes, tempo jogado, mobs, blocos e XP.
+   * para evitar duplicidade nos rankings de mortes, tempo jogado, mobs, blocos, conquistas e XP.
    */
   function getConsolidatedPlayerStats(playerData, onlineNames = []) {
     const rawProfiles = playerData.getAllPlayerProfiles(onlineNames);
@@ -259,6 +281,7 @@ export function createAnalyticsManager({ dataDir }) {
       const mobKills = Number(p.stats?.mobKills || 0);
       const blocksMined = Number(p.stats?.blocksMined || 0);
       const xpLevel = p.xpLevel !== undefined && p.xpLevel !== null ? Number(p.xpLevel) : 0;
+      const advancements = countPlayerAdvancements(p.uuid);
 
       if (!existing) {
         grouped.set(key, {
@@ -276,6 +299,7 @@ export function createAnalyticsManager({ dataDir }) {
           playTimeMinutes,
           mobKills,
           blocksMined,
+          advancements,
           lastSeen: p.lastSeen || null,
         });
       } else {
@@ -290,6 +314,7 @@ export function createAnalyticsManager({ dataDir }) {
         existing.mobKills = Math.max(existing.mobKills, mobKills);
         existing.blocksMined = Math.max(existing.blocksMined, blocksMined);
         existing.xpLevel = Math.max(existing.xpLevel, xpLevel);
+        existing.advancements = Math.max(existing.advancements, advancements);
         if (p.lastSeen && (!existing.lastSeen || p.lastSeen > existing.lastSeen)) {
           existing.lastSeen = p.lastSeen;
           if (p.dimension) existing.dimension = p.dimension;
@@ -322,6 +347,7 @@ export function createAnalyticsManager({ dataDir }) {
     if (m === 'mob_kills' || m === 'mobs') return { metric: 'mob_kills', ranking: topBy('mobKills') };
     if (m === 'blocks_mined' || m === 'mined') return { metric: 'blocks_mined', ranking: topBy('blocksMined') };
     if (m === 'xp' || m === 'xp_level') return { metric: 'xp_level', ranking: topBy('xpLevel') };
+    if (m === 'advancements' || m === 'conquistas') return { metric: 'advancements', ranking: topBy('advancements') };
 
     return {
       totalPlayersTracked: players.length,
@@ -330,6 +356,7 @@ export function createAnalyticsManager({ dataDir }) {
       mostMobKills: topBy('mobKills').slice(0, 5),
       mostBlocksMined: topBy('blocksMined').slice(0, 5),
       highestXpLevel: topBy('xpLevel').slice(0, 5),
+      mostAdvancements: topBy('advancements').slice(0, 5),
     };
   }
 

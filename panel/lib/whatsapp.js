@@ -25,8 +25,24 @@ const DEFAULT_CONFIG = {
   notifyBackup: true,
   notifyServerStatus: true,
   notifyPlayerJoinLeave: false,
+  dailyReportEnabled: false,
+  dailyReportHour: 21, // 0..23 horário local America/Fortaleza
+  lastDailyReportDate: null, // YYYY-MM-DD
   updatedAt: null,
 };
+
+export function formatForWhatsApp(text) {
+  return String(text || '')
+    .replace(/\r\n/g, '\n')
+    // Converte cabeçalhos Markdown (### Título) para *Título*
+    .replace(/^#{1,6}\s+(.+)$/gm, '*$1*')
+    // Converte **negrito** para *negrito* do WhatsApp
+    .replace(/\*\*([^*\n]+)\*\*/g, '*$1*')
+    // Remove excesso de linhas em branco
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .slice(0, 1800);
+}
 
 function escapeRegExp(str) {
   return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -83,13 +99,13 @@ function buildReadOnlyTools() {
         {
           name: 'get_player_rankings',
           description:
-            'Retorna rankings dos jogadores do servidor consolidando contas Java e Bedrock: quem morreu mais (deaths), quem jogou mais tempo (play_time), quem matou mais mobs (mob_kills), quem minerou mais blocos (blocks_mined), maior nível XP (xp) ou todos (all).',
+            'Retorna rankings dos jogadores do servidor consolidando contas Java e Bedrock: quem morreu mais (deaths), quem jogou mais tempo (play_time), quem matou mais mobs (mob_kills), quem minerou mais blocos (blocks_mined), maior nível XP (xp), mais conquistas (advancements) ou todos (all).',
           parameters: {
             type: 'OBJECT',
             properties: {
               metric: {
                 type: 'STRING',
-                description: 'Métrica do ranking: deaths, play_time, mob_kills, blocks_mined, xp ou all.',
+                description: 'Métrica do ranking: deaths, play_time, mob_kills, blocks_mined, xp, advancements ou all.',
               },
             },
           },
@@ -119,6 +135,12 @@ function buildReadOnlyTools() {
           name: 'get_world_info',
           description:
             'Retorna informações sobre o mundo atual do servidor Minecraft: nome do mundo, seed, coordenadas do spawn, dificuldade, modo de jogo padrão, dia atual, período do dia (manhã/tarde/noite) e clima (chuva/tempestade).',
+          parameters: { type: 'OBJECT', properties: {} },
+        },
+        {
+          name: 'get_recent_events',
+          description:
+            'Retorna os eventos recentes do servidor Minecraft (quem entrou ou saiu por último, mortes recentes no chat, conquistas/advancements recentes). Útil para perguntas como "quem foi o último a entrar?" ou "o que aconteceu hoje?".',
           parameters: { type: 'OBJECT', properties: {} },
         },
       ],
@@ -289,10 +311,29 @@ export function createWhatsAppManager({
       ...(typeof patch.notifyPlayerJoinLeave === 'boolean'
         ? { notifyPlayerJoinLeave: patch.notifyPlayerJoinLeave }
         : {}),
+      ...(typeof patch.dailyReportEnabled === 'boolean'
+        ? { dailyReportEnabled: patch.dailyReportEnabled }
+        : {}),
+      ...(patch.dailyReportHour !== undefined
+        ? { dailyReportHour: Math.max(0, Math.min(23, Math.floor(Number(patch.dailyReportHour) || 21))) }
+        : {}),
     };
     const saved = saveConfig(next);
     pushLog('config', 'Configurações do WhatsApp IA atualizadas.');
     return saved;
+  }
+
+  async function setTyping(jid, active = true) {
+    if (!jid) return;
+    try {
+      await bridgeFetch('/typing', {
+        method: 'POST',
+        body: { jid, active: Boolean(active) },
+        timeoutMs: 3000,
+      });
+    } catch {
+      // opcional
+    }
   }
 
   async function connect() {
@@ -586,13 +627,15 @@ export function createWhatsAppManager({
     chatCooldowns.set(chatJid, now);
 
     try {
-      const reply = await generateAiReply({
+      await setTyping(chatJid, true);
+      const rawReply = await generateAiReply({
         chatJid,
         senderName,
         text,
         quotedText: payload.quotedText || null,
         botName: cfg.botName,
       });
+      const reply = formatForWhatsApp(rawReply);
       await sendMessage(chatJid, reply, { quotedId: isGroup ? messageId || null : null });
       pushLog(
         isGroup ? 'group' : 'private',
@@ -603,6 +646,88 @@ export function createWhatsAppManager({
     } catch (err) {
       pushLog('error', `Erro ao responder ${senderName}: ${err.message}`);
       return { handled: false, error: err.message };
+    } finally {
+      setTyping(chatJid, false).catch(() => {});
+    }
+  }
+
+  async function sendDailyReportNow({ markSent = false } = {}) {
+    const cfg = loadConfig();
+    if (!cfg.groupJid) {
+      throw Object.assign(new Error('Selecione primeiro o grupo do WhatsApp nas configurações.'), { status: 400 });
+    }
+    const [report, rankings, status] = await Promise.all([
+      executeReadOnlyTool('get_server_report', { days: 1 }),
+      executeReadOnlyTool('get_player_rankings', { metric: 'all' }),
+      typeof getLiveSnapshot === 'function' ? getLiveSnapshot().catch(() => null) : Promise.resolve(null),
+    ]);
+
+    const uptimeStr = report?.server?.uptimePercent !== null && report?.server?.uptimePercent !== undefined
+      ? `${report.server.uptimePercent}%`
+      : status?.online ? 'Online' : '—';
+    const peak = report?.players?.peakOnline ?? 0;
+    const totalSessions = report?.players?.totalSessions ?? 0;
+    const totalHours = report?.players?.totalPlayMinutes
+      ? `${(report.players.totalPlayMinutes / 60).toFixed(1)}h`
+      : '0h';
+    const topActive = report?.players?.mostActivePlayers?.[0];
+    const topDeaths = rankings?.mostDeaths?.[0];
+    const backupsOk = report?.backups?.succeeded ?? 0;
+    const nowOnline = status?.playersOnlineCount ?? 0;
+
+    const lines = [
+      `📊 *Resumo do dia — ${serverName}*`,
+      `• Status agora: ${status?.online ? `🟢 Online (${nowOnline}/${status.maxPlayers || 6} jogando)` : '🔴 Offline'}`,
+      `• Uptime (24h): *${uptimeStr}* | Pico: *${peak}* jogador(es)`,
+      `• Atividade: *${totalSessions}* sessão(ões) | Tempo total: *${totalHours}*`,
+    ];
+    if (topActive) {
+      lines.push(`• Mais ativo hoje: *${topActive.name}* (${topActive.minutes} min)`);
+    }
+    if (topDeaths && topDeaths.value > 0) {
+      lines.push(`• Líder de mortes no mundo: *${topDeaths.name}* (${topDeaths.value} mortes)`);
+    }
+    lines.push(`• Backups nas últimas 24h: *${backupsOk}* concluído(s)`);
+
+    const msg = lines.join('\n');
+    await sendMessage(cfg.groupJid, msg);
+    if (markSent) {
+      const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Fortaleza' });
+      saveConfig({ ...cfg, lastDailyReportDate: todayKey });
+    }
+    pushLog('notify', 'Resumo diário enviado no grupo.');
+    return { ok: true, text: msg };
+  }
+
+  let schedulerTimer = null;
+  function startScheduler() {
+    stopScheduler();
+    schedulerTimer = setInterval(async () => {
+      try {
+        const cfg = loadConfig();
+        if (!cfg.enabled || !cfg.dailyReportEnabled || !cfg.groupJid) return;
+        const now = new Date();
+        const hourStr = now.toLocaleString('en-US', {
+          timeZone: 'America/Fortaleza',
+          hour: '2-digit',
+          hour12: false,
+        });
+        const currentHour = Number(hourStr) % 24;
+        const todayKey = now.toLocaleDateString('en-CA', { timeZone: 'America/Fortaleza' });
+        if (currentHour === Number(cfg.dailyReportHour ?? 21) && cfg.lastDailyReportDate !== todayKey) {
+          await sendDailyReportNow({ markSent: true });
+        }
+      } catch (err) {
+        pushLog('error', `Falha no resumo diário automático: ${err.message}`);
+      }
+    }, 5 * 60 * 1000);
+    if (typeof schedulerTimer.unref === 'function') schedulerTimer.unref();
+  }
+
+  function stopScheduler() {
+    if (schedulerTimer) {
+      clearInterval(schedulerTimer);
+      schedulerTimer = null;
     }
   }
 
@@ -615,9 +740,12 @@ export function createWhatsAppManager({
     listGroups,
     sendMessage,
     sendTestMessage,
+    sendDailyReportNow,
     notifyBackupResult,
     notifyServerStateChange,
     notifyPlayerEvent,
     handleIncomingMessage,
+    startScheduler,
+    stopScheduler,
   };
 }

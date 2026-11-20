@@ -475,6 +475,19 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    if (url.pathname === '/typing' && req.method === 'POST') {
+      if (!sock || statusState.state !== 'connected') {
+        return sendJson(res, 200, { ok: false });
+      }
+      const body = await readJsonBody(req).catch(() => ({}));
+      const jid = String(body.jid || '').trim();
+      const active = body.active !== false;
+      if (jid) {
+        await sock.sendPresenceUpdate(active ? 'composing' : 'paused', jid).catch(() => {});
+      }
+      return sendJson(res, 200, { ok: true });
+    }
+
     return sendJson(res, 404, { error: 'Rota não encontrada.' });
   } catch (err) {
     sendJson(res, err.status || 500, { error: err.message || 'Erro interno no bridge WhatsApp.' });

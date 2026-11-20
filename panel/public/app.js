@@ -3049,6 +3049,12 @@ function renderWhatsAppStatus(data) {
     $('#wa-cfg-notify-backup').checked = cfg.notifyBackup !== false;
     $('#wa-cfg-notify-status').checked = cfg.notifyServerStatus !== false;
     $('#wa-cfg-notify-players').checked = Boolean(cfg.notifyPlayerJoinLeave);
+    const dailyChk = $('#wa-cfg-daily-report');
+    if (dailyChk) dailyChk.checked = Boolean(cfg.dailyReportEnabled);
+    const dailyHour = $('#wa-cfg-daily-hour');
+    if (dailyHour && cfg.dailyReportHour !== undefined) {
+      dailyHour.value = String(cfg.dailyReportHour);
+    }
     $('#wa-cfg-allowed-private').value = Array.isArray(cfg.allowedPrivateNumbers)
       ? cfg.allowedPrivateNumbers.join(', ')
       : '';
@@ -3153,6 +3159,8 @@ async function saveWhatsAppConfig(e) {
         notifyBackup: $('#wa-cfg-notify-backup').checked,
         notifyServerStatus: $('#wa-cfg-notify-status').checked,
         notifyPlayerJoinLeave: $('#wa-cfg-notify-players').checked,
+        dailyReportEnabled: Boolean($('#wa-cfg-daily-report')?.checked),
+        dailyReportHour: Number($('#wa-cfg-daily-hour')?.value || 21),
         allowedPrivateNumbers: $('#wa-cfg-allowed-private').value,
       },
     });
@@ -3173,6 +3181,16 @@ async function sendWhatsAppTest() {
   }
 }
 
+async function sendWhatsAppDailyReportNow() {
+  try {
+    await api('/api/whatsapp/daily-report', { method: 'POST', body: {} });
+    toast('Resumo diário enviado no grupo do WhatsApp!');
+    await loadWhatsAppStatus(true);
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
 function bindWhatsAppEvents() {
   $('#btn-wa-connect')?.addEventListener('click', connectWhatsApp);
   $('#btn-wa-refresh')?.addEventListener('click', () => loadWhatsAppStatus(false));
@@ -3181,6 +3199,7 @@ function bindWhatsAppEvents() {
   $('#btn-wa-load-groups')?.addEventListener('click', () => loadWhatsAppGroups(false));
   $('#wa-config-form')?.addEventListener('submit', saveWhatsAppConfig);
   $('#btn-wa-test')?.addEventListener('click', sendWhatsAppTest);
+  $('#btn-wa-daily-now')?.addEventListener('click', sendWhatsAppDailyReportNow);
 }
 
 bindEvents();
