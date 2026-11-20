@@ -11,6 +11,7 @@
 minecraft/data/
 !minecraft/data/.gitkeep
 velocity/data/
+whatsapp/auth/
 backups/
 !backups/.gitkeep
 *.tar.gz

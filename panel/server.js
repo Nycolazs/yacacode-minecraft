@@ -16,6 +16,8 @@ import { createAiHistoryStore } from './lib/ai-history.js';
 import { createGoogleDriveBackupManager } from './lib/gdrive.js';
 import { createInGameChatBridge } from './lib/ingame-chat.js';
 import { createCrossplaySyncManager } from './lib/crossplay-sync.js';
+import { createAnalyticsManager } from './lib/analytics.js';
+import { createWhatsAppManager } from './lib/whatsapp.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -49,6 +51,8 @@ const CONFIG = {
   geminiModel: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
   gdriveClientId: process.env.GDRIVE_CLIENT_ID || '',
   gdriveClientSecret: process.env.GDRIVE_CLIENT_SECRET || '',
+  whatsappServiceUrl: process.env.WHATSAPP_SERVICE_URL || 'http://whatsapp:3001',
+  whatsappInternalToken: process.env.WHATSAPP_INTERNAL_TOKEN || process.env.SESSION_SECRET || '',
 };
 
 const auth = createAuthManager({
@@ -72,6 +76,9 @@ const files = createFileManager({
   presetsFile: CONFIG.presetsFile,
 });
 const playerData = createPlayerDataReader(CONFIG.dataDir);
+const analytics = createAnalyticsManager({ dataDir: CONFIG.dataDir });
+let whatsapp = null;
+
 const gdrive = createGoogleDriveBackupManager({
   configFile: path.join(CONFIG.dataDir, '.yacacode-gdrive-config.json'),
   sessionSecret: CONFIG.sessionSecret,
@@ -82,6 +89,12 @@ const gdrive = createGoogleDriveBackupManager({
     files.createWorldBackupArchive({ destDir: os.tmpdir(), maxLocalBackups: 0, onProgress }),
   getBackupFilePath: (name) => files.getBackupFilePath(name),
   getWorldLastModifiedMs: () => files.getWorldLastModifiedMs(),
+  onBackupFinished: (evt) => {
+    analytics.recordBackupEvent(evt);
+    if (whatsapp) {
+      whatsapp.notifyBackupResult(evt).catch(() => {});
+    }
+  },
 });
 gdrive.startScheduler();
 
@@ -598,18 +611,141 @@ const crossplaySync = createCrossplaySyncManager({
     const ping = await pingMinecraftServer(CONFIG.rconHost, 25565, 2000).catch(() => null);
     return ping?.players?.sample || [];
   },
+  onPlayerEvent: (evt) => {
+    analytics.recordPlayerEvent(evt);
+    if (whatsapp) {
+      whatsapp.notifyPlayerEvent(evt).catch(() => {});
+    }
+  },
 });
 crossplaySync.start();
 
+async function getCurrentOnlinePlayerNames() {
+  const rconList = await fetchOnlinePlayersViaRcon().catch(() => null);
+  if (rconList?.players) return rconList.players.map((p) => p.name);
+  const ping = await pingMinecraftServer(CONFIG.rconHost, 25565, 2000).catch(() => null);
+  return (ping?.players?.sample || []).map((p) => p.name);
+}
+
+whatsapp = createWhatsAppManager({
+  dataDir: CONFIG.dataDir,
+  serviceUrl: CONFIG.whatsappServiceUrl,
+  internalToken: CONFIG.whatsappInternalToken,
+  serverName: CONFIG.serverName,
+  mcDomain: CONFIG.mcDomain,
+  getGeminiConfig: () => ai.getActiveGeminiConfig(),
+  toolHandlers: {
+    get_server_status: async () => {
+      const [mcInfo, mcPing, rconList, hostMetrics] = await Promise.all([
+        docker.isAvailable()
+          ? docker.inspectContainer(CONFIG.mcContainerName).catch(() => ({ running: false }))
+          : Promise.resolve({ running: false }),
+        pingMinecraftServer(CONFIG.rconHost, 25565, 2000).catch(() => ({ online: false })),
+        fetchOnlinePlayersViaRcon().catch(() => null),
+        Promise.resolve(system.getHostMetrics()),
+      ]);
+      const onlinePlayers = (rconList?.players || mcPing.players?.sample || []).map((p) => ({
+        name: p.name,
+        edition: String(p.name || '').startsWith('.') ? 'Bedrock' : 'Java',
+      }));
+      return {
+        serverName: CONFIG.serverName,
+        address: CONFIG.mcDomain,
+        javaPort: CONFIG.mcJavaPort,
+        bedrockPort: CONFIG.mcBedrockPort,
+        online: Boolean(mcInfo.running && (mcPing.online || rconList)),
+        containerRunning: Boolean(mcInfo.running),
+        startedAt: mcInfo.startedAt || null,
+        version: mcPing.version || CONFIG.mcVersion,
+        playersOnlineCount: rconList?.online ?? mcPing.players?.online ?? onlinePlayers.length,
+        maxPlayers: rconList?.max ?? mcPing.players?.max ?? 6,
+        onlinePlayers,
+        latencyMs: mcPing.latencyMs ?? null,
+        cpuPercent: lastMcStats?.cpuPercent ?? null,
+        ramUsedMB: lastMcStats?.memoryUsedMB ?? null,
+        hostRamPercent: hostMetrics?.memory?.usedPercent ?? null,
+        temperatureC: hostMetrics?.temperatureC ?? null,
+      };
+    },
+    get_server_report: async ({ days = 7 } = {}) => analytics.getReport(days),
+    get_player_rankings: async ({ metric = 'all' } = {}) => {
+      const onlineNames = await getCurrentOnlinePlayerNames();
+      return analytics.getRankings(playerData, onlineNames, metric);
+    },
+    get_player_stats: async ({ name = '' } = {}) => {
+      const clean = String(name || '').trim().toLowerCase().replace(/^\.+/, '');
+      const onlineNames = await getCurrentOnlinePlayerNames();
+      const all = analytics.getConsolidatedPlayerStats(playerData, onlineNames);
+      const found =
+        all.find((p) => p.key === clean) ||
+        all.find((p) => p.key.includes(clean) || p.name.toLowerCase().includes(clean));
+      if (!found) {
+        return {
+          found: false,
+          message: `Jogador "${name}" não encontrado nos registros do servidor.`,
+          knownPlayers: all.map((p) => p.name).slice(0, 15),
+        };
+      }
+      return { found: true, player: found };
+    },
+    get_backup_status: async () => {
+      const st = gdrive.getPublicStatus('admin');
+      return {
+        connected: st.connected,
+        folderName: st.folderName,
+        scheduleHours: st.scheduleHours,
+        lastBackupAt: st.lastBackupAt,
+        lastUploadFile: st.lastUploadFile,
+        lastUploadSizeMB: st.lastUploadSize ? Math.round((st.lastUploadSize / (1024 * 1024)) * 10) / 10 : null,
+        lastUploadStatus: st.lastUploadStatus,
+        lastError: st.lastError,
+        inProgress: Boolean(st.progress?.active),
+        progressMessage: st.progress?.active ? st.progress.message : null,
+      };
+    },
+  },
+});
+
 // Coletor leve em segundo plano para gráficos de telemetria (a cada 15s)
 let lastMcStats = null;
+let lastAnalyticsSampleAt = 0;
+let lastObservedMcOnline = null;
 async function pollTelemetry() {
   try {
+    let mcRunning = false;
     if (docker.isAvailable()) {
       const mcInfo = await docker.inspectContainer(CONFIG.mcContainerName);
-      lastMcStats = mcInfo.running ? await docker.getContainerStats(CONFIG.mcContainerName) : null;
+      mcRunning = Boolean(mcInfo.running);
+      lastMcStats = mcRunning ? await docker.getContainerStats(CONFIG.mcContainerName) : null;
     }
     system.recordHistoryPoint(lastMcStats);
+
+    if (lastObservedMcOnline !== null && lastObservedMcOnline !== mcRunning) {
+      analytics.recordServerStateChange(mcRunning, mcRunning ? 'Container iniciado' : 'Container parado');
+      if (whatsapp) {
+        whatsapp.notifyServerStateChange({
+          online: mcRunning,
+          reason: mcRunning ? 'Servidor voltou a ficar acessível.' : 'O container do Minecraft foi interrompido.',
+        }).catch(() => {});
+      }
+    } else if (lastObservedMcOnline === null && whatsapp) {
+      whatsapp.notifyServerStateChange({ online: mcRunning }).catch(() => {});
+    }
+    lastObservedMcOnline = mcRunning;
+
+    // Grava amostra consolidada no histórico de 30 dias a cada 15 minutos
+    if (Date.now() - lastAnalyticsSampleAt >= 15 * 60 * 1000) {
+      lastAnalyticsSampleAt = Date.now();
+      const host = system.getHostMetrics();
+      const ping = mcRunning ? await pingMinecraftServer(CONFIG.rconHost, 25565, 1500).catch(() => null) : null;
+      analytics.recordSample({
+        online: mcRunning && Boolean(ping?.online ?? true),
+        players: ping?.players?.online ?? 0,
+        cpu: lastMcStats?.cpuPercent ?? null,
+        ram: host?.memory?.usedPercent ?? null,
+        temp: host?.temperatureC ?? null,
+      });
+    }
   } catch {
     // silencioso
   }
@@ -652,6 +788,17 @@ async function handleApi(req, res, url) {
   // Healthcheck público para Docker
   if (pathname === '/api/health' && method === 'GET') {
     return sendJson(res, 200, { status: 'ok', service: 'yacacode-panel' });
+  }
+
+  // Webhook interno do micro-serviço WhatsApp (autenticado por X-Internal-Token)
+  if (pathname === '/api/internal/whatsapp/incoming' && method === 'POST') {
+    const providedToken = String(req.headers['x-internal-token'] || '').trim();
+    if (CONFIG.whatsappInternalToken && providedToken !== CONFIG.whatsappInternalToken) {
+      return sendJson(res, 401, { error: 'Token interno inválido.' });
+    }
+    const body = await readJsonBody(req, 64 * 1024);
+    const result = await whatsapp.handleIncomingMessage(body);
+    return sendJson(res, 200, { ok: true, ...result });
   }
 
   // Status de sessão / branding
@@ -1416,6 +1563,45 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, result);
   }
 
+  // --- WHATSAPP IA (QR Code + Notificações + Consultas Gemini Read-Only) ---
+  if (pathname === '/api/whatsapp/status' && method === 'GET') {
+    if (!requireRole('admin')) return;
+    const status = await whatsapp.getPublicStatus();
+    return sendJson(res, 200, status);
+  }
+
+  if (pathname === '/api/whatsapp/connect' && method === 'POST') {
+    if (!requireRole('admin')) return;
+    const data = await whatsapp.connect();
+    return sendJson(res, 200, data);
+  }
+
+  if (pathname === '/api/whatsapp/disconnect' && method === 'POST') {
+    if (!requireRole('admin')) return;
+    const body = await readJsonBody(req, 8 * 1024).catch(() => ({}));
+    const data = await whatsapp.disconnect({ logout: Boolean(body.logout) });
+    return sendJson(res, 200, data);
+  }
+
+  if (pathname === '/api/whatsapp/groups' && method === 'GET') {
+    if (!requireRole('admin')) return;
+    const data = await whatsapp.listGroups();
+    return sendJson(res, 200, data);
+  }
+
+  if (pathname === '/api/whatsapp/config' && method === 'PUT') {
+    if (!requireRole('admin')) return;
+    const body = await readJsonBody(req, 32 * 1024);
+    const saved = whatsapp.updateConfig(body);
+    return sendJson(res, 200, { ok: true, config: saved });
+  }
+
+  if (pathname === '/api/whatsapp/test' && method === 'POST') {
+    if (!requireRole('admin')) return;
+    const result = await whatsapp.sendTestMessage();
+    return sendJson(res, 200, result);
+  }
+
   return sendJson(res, 404, { error: 'Rota da API não encontrada.' });
 }
 
@@ -1448,6 +1634,7 @@ process.on('SIGTERM', () => {
   gdrive.stopScheduler();
   inGameChat.stop();
   crossplaySync.stop();
+  analytics.stop();
   server.close(() => process.exit(0));
 });
 process.on('SIGINT', () => {
@@ -1455,5 +1642,6 @@ process.on('SIGINT', () => {
   gdrive.stopScheduler();
   inGameChat.stop();
   crossplaySync.stop();
+  analytics.stop();
   server.close(() => process.exit(0));
 });

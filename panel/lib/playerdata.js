@@ -259,19 +259,23 @@ export function createPlayerDataReader(dataDir) {
       });
     };
 
-    const usercache = safeReadJson(path.join(dataDir, 'usercache.json'), []);
-    if (Array.isArray(usercache)) {
-      for (const u of usercache) register(u.uuid, u.name);
+    for (const rel of ['data/usercache.json', 'usercache.json']) {
+      const usercache = safeReadJson(path.join(dataDir, rel), []);
+      if (Array.isArray(usercache)) {
+        for (const u of usercache) register(u.uuid, u.name);
+      }
     }
 
-    const ops = safeReadJson(path.join(dataDir, 'ops.json'), []);
     const opUuids = new Set();
     const opNames = new Set();
-    if (Array.isArray(ops)) {
-      for (const o of ops) {
-        if (o.uuid) opUuids.add(String(o.uuid).toLowerCase());
-        if (o.name) opNames.add(String(o.name).toLowerCase());
-        register(o.uuid, o.name, { isOp: true, opLevel: o.level || 4 });
+    for (const rel of ['data/ops.json', 'ops.json']) {
+      const ops = safeReadJson(path.join(dataDir, rel), []);
+      if (Array.isArray(ops)) {
+        for (const o of ops) {
+          if (o.uuid) opUuids.add(String(o.uuid).toLowerCase());
+          if (o.name) opNames.add(String(o.name).toLowerCase());
+          register(o.uuid, o.name, { isOp: true, opLevel: o.level || 4 });
+        }
       }
     }
 

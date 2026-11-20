@@ -25,6 +25,8 @@ import {
   parseJoinLeaveLine,
   createCrossplaySyncManager,
 } from '../lib/crossplay-sync.js';
+import { createAnalyticsManager } from '../lib/analytics.js';
+import { createWhatsAppManager, isBotCalledInGroup, normalizePhoneList } from '../lib/whatsapp.js';
 import {
   resolveSafePath,
   parseServerProperties,
@@ -898,5 +900,170 @@ test('AI History: persistência por usuário, isolamento, pendingAction sync e p
     unsubMod();
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('Analytics & WhatsApp IA: relatórios de N dias, ranking consolidado Java+Bedrock, gatilho e notificações', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'yc-wa-test-'));
+  try {
+    // 1) Prepara usercache + stats de Java e Bedrock para testar consolidação de ranking
+    const javaUuid = '11111111-1111-3111-8111-111111111111';
+    const bedrockUuid = '22222222-2222-3222-8222-222222222222';
+    const otherUuid = '33333333-3333-3333-8333-333333333333';
+    fs.mkdirSync(path.join(tmpDir, 'data'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'world/players/stats'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, 'data/usercache.json'),
+      JSON.stringify([
+        { name: 'Nycolazs', uuid: javaUuid },
+        { name: '.Nycolazs', uuid: bedrockUuid },
+        { name: 'Joao', uuid: otherUuid },
+      ])
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, `world/players/stats/${javaUuid}.json`),
+      JSON.stringify({ stats: { 'minecraft:custom': { 'minecraft:deaths': 12, 'minecraft:play_time': 72000, 'minecraft:mob_kills': 50 } } })
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, `world/players/stats/${bedrockUuid}.json`),
+      JSON.stringify({ stats: { 'minecraft:custom': { 'minecraft:deaths': 12, 'minecraft:play_time': 72000, 'minecraft:mob_kills': 50 } } })
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, `world/players/stats/${otherUuid}.json`),
+      JSON.stringify({ stats: { 'minecraft:custom': { 'minecraft:deaths': 25, 'minecraft:play_time': 36000, 'minecraft:mob_kills': 10 } } })
+    );
+
+    const analytics = createAnalyticsManager({ dataDir: tmpDir });
+    const now = Date.now();
+    analytics.recordSample({ online: true, players: 3, cpu: 12.5, ram: 34.0, temp: 46.2, ts: now - 3600_000 });
+    analytics.recordSample({ online: true, players: 5, cpu: 22.5, ram: 38.0, temp: 48.8, ts: now - 1800_000 });
+    analytics.recordPlayerEvent({ name: 'Nycolazs', event: 'join', ts: now - 1200_000 });
+    analytics.recordPlayerEvent({ name: 'Nycolazs', event: 'leave', ts: now - 600_000 });
+    analytics.recordBackupEvent({ ok: true, fileName: 'yacacode-world.tar.gz', sizeBytes: 150 * 1024 * 1024, ts: now - 300_000 });
+
+    const report = analytics.getReport(7);
+    assert.equal(report.periodDays, 7);
+    assert.equal(report.server.uptimePercent, 100);
+    assert.equal(report.players.peakOnline, 5);
+    assert.equal(report.players.uniquePlayersCount, 1);
+    assert.equal(report.backups.succeeded, 1);
+
+    const reader = createPlayerDataReader(tmpDir);
+    const deathsRanking = analytics.getRankings(reader, ['Nycolazs'], 'deaths');
+    assert.equal(deathsRanking.ranking.length, 2); // Nycolazs + .Nycolazs consolidados em 1!
+    assert.equal(deathsRanking.ranking[0].name, 'Joao');
+    assert.equal(deathsRanking.ranking[0].value, 25);
+    assert.equal(deathsRanking.ranking[1].name, 'Nycolazs');
+    assert.equal(deathsRanking.ranking[1].value, 12);
+
+    // 2) Helpers de gatilho e telefone
+    assert.equal(isBotCalledInGroup('Jorge, quem morreu mais?', 'Jorge'), true);
+    assert.equal(isBotCalledInGroup('e ai galera bora jogar', 'Jorge'), false);
+    assert.equal(isBotCalledInGroup('qual o status?', 'Jorge', { isMentioningBot: true }), true);
+    assert.deepEqual(normalizePhoneList('+55 (11) 99999-8888, 5585988887777'), ['5511999998888', '5585988887777']);
+
+    // 3) WhatsApp Manager: Function Calling read-only + envio ao bridge mockado + notificação de backup
+    const sentMessages = [];
+    let geminiCalls = 0;
+    const mockFetch = async (url, opts) => {
+      if (String(url).includes('/send')) {
+        const body = JSON.parse(opts.body);
+        sentMessages.push(body);
+        return { ok: true, status: 200, json: async () => ({ ok: true, messageId: 'msg-1' }) };
+      }
+      if (String(url).includes('generativelanguage.googleapis.com')) {
+        geminiCalls += 1;
+        if (geminiCalls === 1) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              candidates: [
+                {
+                  content: {
+                    parts: [{ functionCall: { name: 'get_player_rankings', args: { metric: 'deaths' } } }],
+                  },
+                },
+              ],
+            }),
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            candidates: [
+              {
+                content: {
+                  parts: [{ text: '💀 Quem morreu mais foi *Joao* com 25 mortes, seguido de *Nycolazs* (12).' }],
+                },
+              },
+            ],
+          }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({ state: 'connected' }) };
+    };
+
+    const wa = createWhatsAppManager({
+      dataDir: tmpDir,
+      serviceUrl: 'http://whatsapp:3001',
+      internalToken: 'secret',
+      getGeminiConfig: () => ({ apiKey: 'test-key', model: 'gemini-3.5-flash-lite' }),
+      toolHandlers: {
+        get_player_rankings: async ({ metric }) => analytics.getRankings(reader, ['Nycolazs'], metric),
+      },
+      fetchImpl: mockFetch,
+    });
+
+    wa.updateConfig({
+      enabled: true,
+      botName: 'Jorge',
+      groupJid: '120363000000@g.us',
+      groupName: 'Grupo Minecraft',
+      respondInGroup: true,
+      notifyBackup: true,
+    });
+
+    // Mensagem no grupo SEM chamar Jorge -> ignorada
+    const ignored = await wa.handleIncomingMessage({
+      messageId: 'm1',
+      chatJid: '120363000000@g.us',
+      isGroup: true,
+      senderPhone: '5511999998888',
+      pushName: 'Nycolas',
+      text: 'oi pessoal',
+    });
+    assert.equal(ignored.handled, false);
+    assert.equal(ignored.reason, 'not_called');
+
+    // Mensagem no grupo chamando Jorge -> aciona tool read-only e responde no grupo
+    const handled = await wa.handleIncomingMessage({
+      messageId: 'm2',
+      chatJid: '120363000000@g.us',
+      isGroup: true,
+      senderPhone: '5511999998888',
+      pushName: 'Nycolas',
+      text: 'Jorge, qual jogador morreu mais?',
+    });
+    assert.equal(handled.handled, true);
+    assert.equal(sentMessages.length, 1);
+    assert.equal(sentMessages[0].jid, '120363000000@g.us');
+    assert.match(sentMessages[0].text, /Joao/);
+
+    // Notificação automática de backup concluído
+    const notified = await wa.notifyBackupResult({
+      ok: true,
+      fileName: 'yacacode-world-2026.tar.gz',
+      sizeBytes: 180 * 1024 * 1024,
+      prunedCount: 1,
+    });
+    assert.equal(notified, true);
+    assert.equal(sentMessages.length, 2);
+    assert.match(sentMessages[1].text, /Backup concluído/);
+
+    analytics.stop();
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });

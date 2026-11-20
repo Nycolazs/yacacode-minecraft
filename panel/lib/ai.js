@@ -917,8 +917,17 @@ export function createAiAssistant({
     return { ok: true, reply, model: usedModel };
   }
 
+  function getActiveGeminiConfig() {
+    const cfg = loadConfig();
+    return {
+      apiKey: cfg.apiKey || '',
+      model: cfg.model || DEFAULT_MODEL,
+    };
+  }
+
   return {
     getPublicStatus,
+    getActiveGeminiConfig,
     updateConfig,
     chat,
     chatInGame,

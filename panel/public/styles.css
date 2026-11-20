@@ -2151,3 +2151,106 @@ dialog::backdrop {
   .inline-form { flex-direction: column; align-items: stretch; }
   .topbar-right .pill { display: none; }
 }
+
+/* ============================================================================
+   WHATSAPP IA
+   ============================================================================ */
+.wa-connect-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.wa-qr-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1rem;
+  background: var(--surface-elevated);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+.wa-qr-container img {
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  padding: 0.4rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.wa-connected-info {
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-md);
+  background: var(--ok-soft);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.wa-account-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.wa-account-row strong {
+  display: block;
+  font-size: 0.95rem;
+}
+
+.wa-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.wa-checks-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: var(--radius-md);
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+}
+
+.wa-warn-banner {
+  padding: 0.7rem 0.9rem;
+  border-radius: var(--radius-sm);
+  background: var(--warn-soft, rgba(245, 158, 11, 0.14));
+  border: 1px solid var(--warn);
+  font-size: 0.84rem;
+}
+
+.wa-logs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.wa-log-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  font-size: 0.84rem;
+}
+
+.wa-log-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.wa-log-details {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+}

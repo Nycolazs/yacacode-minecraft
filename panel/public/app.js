@@ -5,6 +5,7 @@
 const TAB_META = {
   overview: { title: 'Visão Geral', subtitle: 'Monitoramento 24/7 do servidor YacaCode' },
   ai: { title: 'Assistente IA', subtitle: 'Chat inteligente Gemini com consultas ao vivo e comandos no servidor' },
+  whatsapp: { title: 'WhatsApp IA', subtitle: 'Avisos automáticos de backup/status e perguntas no grupo ou privado' },
   console: { title: 'Console ao Vivo', subtitle: 'Logs em tempo real via Docker SSE + comandos RCON' },
   players: { title: 'Jogadores', subtitle: 'Gerencie jogadores Java & Bedrock, Whitelist, OPs e Banimentos' },
   settings: { title: 'Configurações', subtitle: 'Presets Orange Pi 4GB + GeyserMC e editor de server.properties' },
@@ -45,9 +46,12 @@ const state = {
   gdriveStatus: null,
   gdProgressTimer: null,
   gdWasActive: false,
+  waStatus: null,
+  waGroups: [],
+  waPollTimer: null,
 };
 
-const TAB_ORDER = ['overview', 'ai', 'console', 'players', 'settings', 'plugins', 'files', 'backups', 'network', 'users'];
+const TAB_ORDER = ['overview', 'ai', 'whatsapp', 'console', 'players', 'settings', 'plugins', 'files', 'backups', 'network', 'users'];
 const AI_THINKING_PHRASES = [
   'Pensando...',
   'Consultando o servidor...',
@@ -227,6 +231,7 @@ window.addEventListener('storage', (e) => {
 function showLogin() {
   stopPolling();
   stopGdriveProgressPolling();
+  stopWhatsAppPolling();
   disconnectSse();
   disconnectAiSync();
   state.aiConversations = [];
@@ -267,6 +272,7 @@ function showApp(authData) {
     if (btn && btn.parentElement) btn.parentElement.classList.toggle('hidden', !visible);
   };
   setTabVis('console', isMod);
+  setTabVis('whatsapp', isAdmin);
   setTabVis('files', isAdmin);
   setTabVis('settings', isAdmin);
   setTabVis('plugins', isAdmin);
@@ -279,7 +285,10 @@ function showApp(authData) {
   loadOverview();
   loadAiConversations(true);
   connectAiSync();
-  if (isAdmin) loadUsers();
+  if (isAdmin) {
+    loadUsers();
+    loadWhatsAppStatus(true);
+  }
   startPolling();
 
   // Tratar retorno do OAuth do Google Drive (?tab=backups&gdrive=connected|error)
@@ -368,6 +377,7 @@ function switchTab(tab) {
     loadAiConversations(false);
     connectAiSync();
   }
+  if (tab === 'whatsapp') loadWhatsAppStatus();
   if (tab === 'console') connectSse();
   if (tab === 'players') loadPlayers();
   if (tab === 'settings') loadProperties();
@@ -2901,5 +2911,278 @@ async function saveAiConfig(e) {
   }
 }
 
+// ----------------------------------------------------------------------------
+// WHATSAPP IA (QR Code + Grupo + Notificações + Logs)
+// ----------------------------------------------------------------------------
+function stopWhatsAppPolling() {
+  if (state.waPollTimer) {
+    clearInterval(state.waPollTimer);
+    state.waPollTimer = null;
+  }
+}
+
+function ensureWhatsAppPolling() {
+  if (state.waPollTimer) return;
+  state.waPollTimer = setInterval(() => {
+    if (state.activeTab !== 'whatsapp') {
+      stopWhatsAppPolling();
+      return;
+    }
+    loadWhatsAppStatus(true);
+  }, 3000);
+}
+
+function renderWhatsAppGroupOptions(selectedJid, selectedName) {
+  const sel = $('#wa-cfg-group');
+  if (!sel) return;
+  const groups = Array.isArray(state.waGroups) ? state.waGroups : [];
+  const opts = ['<option value="">Nenhum grupo selecionado</option>'];
+  let foundSelected = false;
+  for (const g of groups) {
+    const isSel = selectedJid && g.jid === selectedJid;
+    if (isSel) foundSelected = true;
+    opts.push(
+      `<option value="${escapeHtml(g.jid)}" data-name="${escapeHtml(g.subject)}" ${isSel ? 'selected' : ''}>${escapeHtml(g.subject)} (${g.participantsCount || 0})</option>`
+    );
+  }
+  if (selectedJid && !foundSelected) {
+    opts.push(
+      `<option value="${escapeHtml(selectedJid)}" data-name="${escapeHtml(selectedName || selectedJid)}" selected>${escapeHtml(selectedName || selectedJid)}</option>`
+    );
+  }
+  sel.innerHTML = opts.join('');
+}
+
+function renderWhatsAppStatus(data) {
+  if (!data) return;
+  state.waStatus = data;
+  const bridge = data.bridge || {};
+  const cfg = data.config || {};
+  const st = bridge.state || 'disconnected';
+
+  const navBadge = $('#nav-wa-badge');
+  if (navBadge) {
+    navBadge.textContent = st === 'connected' ? 'ON' : st === 'qr' ? 'QR' : 'OFF';
+  }
+
+  const pill = $('#wa-status-pill');
+  const qrBox = $('#wa-qr-container');
+  const qrImg = $('#wa-qr-img');
+  const connBox = $('#wa-connected-info');
+  const noteEl = $('#wa-status-note');
+  const btnConnect = $('#btn-wa-connect');
+  const btnDisconnect = $('#btn-wa-disconnect');
+  const btnLogout = $('#btn-wa-logout');
+  const aiWarn = $('#wa-ai-warning');
+
+  if (aiWarn) aiWarn.classList.toggle('hidden', Boolean(data.aiConfigured));
+
+  if (pill) {
+    if (st === 'connected') {
+      pill.textContent = 'Conectado';
+      pill.className = 'pill pill-ok';
+    } else if (st === 'qr') {
+      pill.textContent = 'Aguardando QR Code';
+      pill.className = 'pill pill-warn';
+    } else if (st === 'connecting') {
+      pill.textContent = 'Conectando...';
+      pill.className = 'pill pill-info';
+    } else if (st === 'offline') {
+      pill.textContent = 'Serviço offline';
+      pill.className = 'pill pill-danger';
+    } else {
+      pill.textContent = 'Desconectado';
+      pill.className = 'pill pill-muted';
+    }
+  }
+
+  if (qrBox && qrImg) {
+    if (st === 'qr' && bridge.qrDataUrl) {
+      qrImg.src = bridge.qrDataUrl;
+      qrBox.classList.remove('hidden');
+    } else {
+      qrBox.classList.add('hidden');
+    }
+  }
+
+  if (connBox) {
+    if (st === 'connected') {
+      connBox.classList.remove('hidden');
+      $('#wa-account-name').textContent = bridge.pushName || 'WhatsApp conectado';
+      $('#wa-account-phone').textContent = bridge.phone ? `+${bridge.phone}` : 'Sessão ativa';
+    } else {
+      connBox.classList.add('hidden');
+    }
+  }
+
+  if (noteEl) {
+    if (bridge.lastError) {
+      noteEl.textContent = bridge.lastError;
+    } else if (st === 'connected') {
+      noteEl.textContent = 'Sessão conectada e pronta para responder perguntas e enviar avisos automáticos.';
+    } else if (st === 'qr') {
+      noteEl.textContent = 'Escaneie o QR Code acima com o WhatsApp. Esta tela atualiza sozinha assim que conectar.';
+    } else if (st === 'connecting') {
+      noteEl.textContent = 'Inicializando conexão segura com o WhatsApp...';
+    } else {
+      noteEl.textContent = 'Clique em "Conectar / Gerar QR" para parear o WhatsApp com a IA do servidor.';
+    }
+  }
+
+  if (btnConnect) btnConnect.classList.toggle('hidden', st === 'connected');
+  if (btnDisconnect) btnDisconnect.classList.toggle('hidden', st !== 'connected' && st !== 'qr' && st !== 'connecting');
+  if (btnLogout) btnLogout.classList.toggle('hidden', st !== 'connected' && !bridge.hasSession);
+
+  if (st === 'qr' || st === 'connecting') {
+    ensureWhatsAppPolling();
+  } else {
+    stopWhatsAppPolling();
+  }
+
+  // Preenche formulário apenas se o usuário não estiver digitando nele
+  const form = $('#wa-config-form');
+  if (form && !form.contains(document.activeElement)) {
+    $('#wa-cfg-enabled').checked = cfg.enabled !== false;
+    $('#wa-cfg-bot-name').value = cfg.botName || 'Jorge';
+    $('#wa-cfg-respond-group').checked = cfg.respondInGroup !== false;
+    $('#wa-cfg-respond-private').checked = cfg.respondInPrivate !== false;
+    $('#wa-cfg-notify-backup').checked = cfg.notifyBackup !== false;
+    $('#wa-cfg-notify-status').checked = cfg.notifyServerStatus !== false;
+    $('#wa-cfg-notify-players').checked = Boolean(cfg.notifyPlayerJoinLeave);
+    $('#wa-cfg-allowed-private').value = Array.isArray(cfg.allowedPrivateNumbers)
+      ? cfg.allowedPrivateNumbers.join(', ')
+      : '';
+    renderWhatsAppGroupOptions(cfg.groupJid || '', cfg.groupName || '');
+  }
+
+  // Logs recentes
+  const logsEl = $('#wa-logs-list');
+  if (logsEl) {
+    const logs = Array.isArray(data.recentLogs) ? data.recentLogs : [];
+    if (!logs.length) {
+      logsEl.innerHTML = '<p class="muted-text">Nenhuma atividade registrada ainda.</p>';
+    } else {
+      logsEl.innerHTML = logs
+        .map(
+          (l) => `
+          <div class="wa-log-item">
+            <div class="wa-log-head">
+              <strong>${escapeHtml(l.summary)}</strong>
+              <small class="muted-text">${escapeHtml(formatDate(l.ts))}</small>
+            </div>
+            ${l.details ? `<div class="wa-log-details">${escapeHtml(l.details)}</div>` : ''}
+          </div>`
+        )
+        .join('');
+    }
+  }
+}
+
+async function loadWhatsAppStatus(silent = false) {
+  try {
+    const data = await api('/api/whatsapp/status');
+    renderWhatsAppStatus(data);
+    if (data.bridge?.state === 'connected' && state.waGroups.length === 0 && state.activeTab === 'whatsapp') {
+      loadWhatsAppGroups(true);
+    }
+  } catch (err) {
+    if (!silent) toast(`WhatsApp IA: ${err.message}`, 'warn');
+  }
+}
+
+async function loadWhatsAppGroups(silent = false) {
+  try {
+    const data = await api('/api/whatsapp/groups');
+    state.waGroups = Array.isArray(data.groups) ? data.groups : [];
+    const cfg = state.waStatus?.config || {};
+    renderWhatsAppGroupOptions(cfg.groupJid || '', cfg.groupName || '');
+    if (!silent) toast(`${state.waGroups.length} grupo(s) carregado(s).`);
+  } catch (err) {
+    if (!silent) toast(err.message, 'warn');
+  }
+}
+
+async function connectWhatsApp() {
+  try {
+    await api('/api/whatsapp/connect', { method: 'POST', body: {} });
+    toast('Gerando QR Code do WhatsApp...');
+    await loadWhatsAppStatus(true);
+    ensureWhatsAppPolling();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+async function disconnectWhatsApp(logout = false) {
+  if (logout) {
+    const ok = await confirmDialog(
+      'Trocar número do WhatsApp',
+      'Isso encerrará a sessão atual e apagará as credenciais salvas para parear outro número via QR Code. Deseja continuar?',
+      'Desconectar e Limpar',
+      true
+    );
+    if (!ok) return;
+  }
+  try {
+    await api('/api/whatsapp/disconnect', { method: 'POST', body: { logout } });
+    toast(logout ? 'Sessão removida. Você já pode parear outro número.' : 'WhatsApp desconectado.');
+    state.waGroups = [];
+    await loadWhatsAppStatus(true);
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+async function saveWhatsAppConfig(e) {
+  e.preventDefault();
+  const sel = $('#wa-cfg-group');
+  const selectedOpt = sel?.options?.[sel.selectedIndex];
+  const groupJid = sel?.value || '';
+  const groupName = selectedOpt?.dataset?.name || (groupJid ? selectedOpt?.textContent || '' : '');
+
+  try {
+    await api('/api/whatsapp/config', {
+      method: 'PUT',
+      body: {
+        enabled: $('#wa-cfg-enabled').checked,
+        botName: $('#wa-cfg-bot-name').value.trim() || 'Jorge',
+        groupJid,
+        groupName,
+        respondInGroup: $('#wa-cfg-respond-group').checked,
+        respondInPrivate: $('#wa-cfg-respond-private').checked,
+        notifyBackup: $('#wa-cfg-notify-backup').checked,
+        notifyServerStatus: $('#wa-cfg-notify-status').checked,
+        notifyPlayerJoinLeave: $('#wa-cfg-notify-players').checked,
+        allowedPrivateNumbers: $('#wa-cfg-allowed-private').value,
+      },
+    });
+    toast('Configurações do WhatsApp IA salvas!');
+    await loadWhatsAppStatus(true);
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+async function sendWhatsAppTest() {
+  try {
+    await api('/api/whatsapp/test', { method: 'POST', body: {} });
+    toast('Mensagem de teste enviada no grupo do WhatsApp!');
+    await loadWhatsAppStatus(true);
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+function bindWhatsAppEvents() {
+  $('#btn-wa-connect')?.addEventListener('click', connectWhatsApp);
+  $('#btn-wa-refresh')?.addEventListener('click', () => loadWhatsAppStatus(false));
+  $('#btn-wa-disconnect')?.addEventListener('click', () => disconnectWhatsApp(false));
+  $('#btn-wa-logout')?.addEventListener('click', () => disconnectWhatsApp(true));
+  $('#btn-wa-load-groups')?.addEventListener('click', () => loadWhatsAppGroups(false));
+  $('#wa-config-form')?.addEventListener('submit', saveWhatsAppConfig);
+  $('#btn-wa-test')?.addEventListener('click', sendWhatsAppTest);
+}
+
 bindEvents();
+bindWhatsAppEvents();
 bootstrap();

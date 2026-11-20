@@ -77,6 +77,7 @@ export function createCrossplaySyncManager({
   containerName,
   sendMcCommand,
   fetchOnlinePlayers = null,
+  onPlayerEvent = null,
   saveSettleDelayMs = 600,
 }) {
   const playersRoot = path.join(dataDir, 'world/players');
@@ -292,6 +293,13 @@ export function createCrossplaySyncManager({
       edition,
       joinedAt: Date.now(),
     });
+    if (typeof onPlayerEvent === 'function') {
+      try {
+        Promise.resolve(onPlayerEvent({ name: playerName, edition, event: 'join' })).catch(() => {});
+      } catch {
+        // ignore
+      }
+    }
     return { action: 'joined', player: playerName, edition };
   }
 
@@ -307,6 +315,15 @@ export function createCrossplaySyncManager({
     const existing = activeSessions.get(key);
     if (existing && existing.name.toLowerCase() === lower) {
       activeSessions.delete(key);
+    }
+    if (typeof onPlayerEvent === 'function') {
+      try {
+        Promise.resolve(
+          onPlayerEvent({ name: playerName, edition: detectEdition(playerName), event: 'leave' })
+        ).catch(() => {});
+      } catch {
+        // ignore
+      }
     }
 
     // Aguarda o servidor finalizar a escrita do arquivo .dat ao desconectar

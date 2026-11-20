@@ -184,6 +184,8 @@ services:
       GEMINI_MODEL: "${GEMINI_MODEL:-gemini-3.5-flash-lite}"
       GDRIVE_CLIENT_ID: "${GDRIVE_CLIENT_ID:-}"
       GDRIVE_CLIENT_SECRET: "${GDRIVE_CLIENT_SECRET:-}"
+      WHATSAPP_SERVICE_URL: "http://whatsapp:3001"
+      WHATSAPP_INTERNAL_TOKEN: "${PANEL_SESSION_SECRET}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./minecraft/data:/mc-data
@@ -198,6 +200,37 @@ services:
       - minecraft
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging: *default-logging
+
+  # ----------------------------------------------------------------------------
+  # 2B. BRIDGE WHATSAPP IA (Baileys leve, sem navegador — rede interna apenas)
+  # ----------------------------------------------------------------------------
+  whatsapp:
+    build:
+      context: ./whatsapp
+      dockerfile: Dockerfile
+    image: yacacode-whatsapp:latest
+    container_name: yacacode-whatsapp
+    restart: unless-stopped
+    mem_limit: 192m
+    environment:
+      TZ: "${TZ:-America/Fortaleza}"
+      PORT: "3001"
+      AUTH_DIR: "/wa-auth"
+      WHATSAPP_INTERNAL_TOKEN: "${PANEL_SESSION_SECRET}"
+      PANEL_WEBHOOK_URL: "http://panel:8080/api/internal/whatsapp/incoming"
+    volumes:
+      - ./whatsapp/auth:/wa-auth
+    networks:
+      - yacacode-net
+    depends_on:
+      - panel
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3

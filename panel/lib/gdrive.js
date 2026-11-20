@@ -62,6 +62,7 @@ export function createGoogleDriveBackupManager({
   createLocalBackup,
   getBackupFilePath,
   getWorldLastModifiedMs,
+  onBackupFinished = null,
   chunkSizeBytes = UPLOAD_CHUNK_BYTES,
 }) {
   const hmacKey = sessionSecret || crypto.randomBytes(32).toString('hex');
@@ -836,6 +837,22 @@ export function createGoogleDriveBackupManager({
         error: null,
       });
 
+      if (typeof onBackupFinished === 'function') {
+        try {
+          Promise.resolve(
+            onBackupFinished({
+              ok: true,
+              fileName: uploaded.name,
+              sizeBytes: uploaded.size,
+              prunedCount: pruned.deleted,
+              finishedAt,
+            })
+          ).catch(() => {});
+        } catch {
+          // silencioso
+        }
+      }
+
       return {
         ok: true,
         uploaded,
@@ -856,6 +873,21 @@ export function createGoogleDriveBackupManager({
         message: `Falha no backup: ${err.message}`,
         error: err.message,
       });
+      if (typeof onBackupFinished === 'function') {
+        try {
+          Promise.resolve(
+            onBackupFinished({
+              ok: false,
+              fileName: null,
+              sizeBytes: 0,
+              error: err.message,
+              finishedAt,
+            })
+          ).catch(() => {});
+        } catch {
+          // silencioso
+        }
+      }
       throw err;
     } finally {
       if (tempFileToCleanup) {
