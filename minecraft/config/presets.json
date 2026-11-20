@@ -1,0 +1,81 @@
+{
+  "description": "Presets ultra-otimizados YacaCode para até 6 jogadores em Orange Pi Zero 2W 4GB ARM64 (baixa temperatura e 20 TPS)",
+  "geyser": {
+    "file": "plugins/Geyser-Spigot/config.yml",
+    "replacements": [
+      { "section": "bedrock", "key": "address", "value": "0.0.0.0" },
+      { "section": "bedrock", "key": "port", "value": "19132" },
+      { "section": "bedrock", "key": "clone-remote-port", "value": "false" },
+      { "section": "bedrock", "key": "transport", "value": "nethernet" },
+      { "section": "bedrock", "key": "motd1", "value": "\"§a§lYacaCode §8| §6Minecraft 26.3\"" },
+      { "section": "bedrock", "key": "motd2", "value": "\"§7Java & Bedrock Crossplay • yacacode.com\"" },
+      { "section": "bedrock", "key": "server-name", "value": "\"YacaCode\"" },
+      { "section": "motd", "key": "primary-motd", "value": "\"§a§lYacaCode §8| §6Minecraft 26.3\"" },
+      { "section": "motd", "key": "secondary-motd", "value": "\"§7Java & Bedrock Crossplay • yacacode.com\"" },
+      { "section": "motd", "key": "server-name", "value": "\"YacaCode\"" },
+      { "section": "java", "key": "auth-type", "value": "floodgate" },
+      { "section": "remote", "key": "auth-type", "value": "floodgate" },
+      { "section": "root", "key": "auth-type", "value": "floodgate" },
+      { "section": "root", "key": "allow-third-party-capes", "value": "false" },
+      { "section": "root", "key": "show-cooldown", "value": "title" },
+      { "section": "root", "key": "enable-proxy-connections", "value": "false" },
+      { "section": "root", "key": "cache-images", "value": "0" }
+    ]
+  },
+  "bukkit": {
+    "file": "bukkit.yml",
+    "replacements": [
+      { "section": "spawn-limits", "key": "monsters", "value": "35" },
+      { "section": "spawn-limits", "key": "animals", "value": "6" },
+      { "section": "spawn-limits", "key": "water-animals", "value": "2" },
+      { "section": "spawn-limits", "key": "water-ambient", "value": "5" },
+      { "section": "spawn-limits", "key": "water-underground-creature", "value": "2" },
+      { "section": "spawn-limits", "key": "axolotls", "value": "2" },
+      { "section": "spawn-limits", "key": "ambient", "value": "1" },
+      { "section": "ticks-per", "key": "monster-spawns", "value": "4" },
+      { "section": "ticks-per", "key": "animal-spawns", "value": "400" },
+      { "section": "ticks-per", "key": "autosave", "value": "6000" }
+    ]
+  },
+  "spigot": {
+    "file": "spigot.yml",
+    "replacements": [
+      { "section": "world-settings.default", "key": "mob-spawn-range", "value": "4" },
+      { "section": "world-settings.default", "key": "nerf-spawner-mobs", "value": "true" },
+      { "section": "world-settings.default.entity-activation-range", "key": "animals", "value": "12" },
+      { "section": "world-settings.default.entity-activation-range", "key": "monsters", "value": "20" },
+      { "section": "world-settings.default.entity-activation-range", "key": "raiders", "value": "32" },
+      { "section": "world-settings.default.entity-activation-range", "key": "misc", "value": "6" },
+      { "section": "world-settings.default.entity-activation-range", "key": "water", "value": "8" },
+      { "section": "world-settings.default.entity-activation-range", "key": "villagers", "value": "16" },
+      { "section": "world-settings.default.merge-radius", "key": "item", "value": "4.0" },
+      { "section": "world-settings.default.merge-radius", "key": "exp", "value": "6.0" },
+      { "section": "world-settings.default", "key": "arrow-despawn-rate", "value": "200" },
+      { "section": "world-settings.default", "key": "item-despawn-rate", "value": "4800" }
+    ]
+  },
+  "paperGlobal": {
+    "file": "config/paper-global.yml",
+    "replacements": [
+      { "section": "spark", "key": "enabled", "value": "true" },
+      { "section": "chunk-system", "key": "io-threads", "value": "1" },
+      { "section": "chunk-system", "key": "worker-threads", "value": "2" }
+    ]
+  },
+  "paperWorld": {
+    "file": "config/paper-world-defaults.yml",
+    "replacements": [
+      { "section": "chunks", "key": "max-auto-save-chunks-per-tick", "value": "6" },
+      { "section": "chunks", "key": "prevent-moving-into-unloaded-chunks", "value": "true" },
+      { "section": "chunks", "key": "delay-chunk-unloads-by", "value": "10s" },
+      { "section": "environment", "key": "optimize-explosions", "value": "true" },
+      { "section": "entities.spawning", "key": "per-player-mob-spawns", "value": "true" },
+      { "section": "entities.spawning.alt-item-despawn-rate", "key": "enabled", "value": "true" },
+      { "section": "entities.behavior", "key": "update-pathfinding-on-block-update", "value": "false" },
+      { "section": "entities.armor-stands", "key": "tick", "value": "false" },
+      { "section": "entities.armor-stands", "key": "do-collision-entity-lookups", "value": "false" },
+      { "section": "collisions", "key": "max-entity-collisions", "value": "2" },
+      { "section": "misc", "key": "redstone-implementation", "value": "ALTERNATE_CURRENT" }
+    ]
+  }
+}

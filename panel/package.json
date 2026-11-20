@@ -1,0 +1,14 @@
+{
+  "name": "yacacode-mc-panel",
+  "version": "1.0.0",
+  "description": "Painel administrativo profissional e ultra-leve da YacaCode para servidor Minecraft Paper 26.3 + GeyserMC em Orange Pi 4GB ARM64",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

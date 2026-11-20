@@ -1,0 +1,27 @@
+# Segredos & configurações locais
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.der
+.yacacode-*.json
+
+# Dados de produção do servidor Minecraft e backups locais
+minecraft/data/
+!minecraft/data/.gitkeep
+backups/
+!backups/.gitkeep
+*.tar.gz
+*.tgz
+*.zip
+*.jar
+*.dat
+*.dat_old
+
+# Sistema & dependências
+.DS_Store
+Thumbs.db
+node_modules/
+*.log
+*.bak

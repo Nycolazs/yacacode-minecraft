@@ -1,0 +1,29 @@
+FROM debian:trixie-slim
+
+ARG TARGETARCH
+
+LABEL org.opencontainers.image.title="YacaCode Pumpkin Rust Minecraft Server" \
+      org.opencontainers.image.description="Servidor Minecraft 26.3 (Java + Bedrock NetherNet) nativo em Rust para Orange Pi ARM64"
+
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      ca-certificates curl netcat-openbsd procps && \
+    rm -rf /var/lib/apt/lists/*
+
+# Se o binário já foi pré-baixado no build context, usa ele; caso contrário baixa do GitHub Releases
+COPY entrypoint-pumpkin.sh /usr/local/bin/entrypoint-pumpkin.sh
+COPY rcon-cli-pumpkin.sh /usr/local/bin/rcon-cli
+COPY config/pumpkin.toml /etc/pumpkin-default.toml
+
+RUN chmod +x /usr/local/bin/entrypoint-pumpkin.sh /usr/local/bin/rcon-cli && \
+    printf '#!/bin/sh\nnc -z 127.0.0.1 25565\n' > /usr/local/bin/mc-health && \
+    chmod +x /usr/local/bin/mc-health
+
+WORKDIR /data
+
+EXPOSE 25565/tcp 19132/tcp 19132/udp 7551/udp
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD mc-health
+
+ENTRYPOINT ["/usr/local/bin/entrypoint-pumpkin.sh"]

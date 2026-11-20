@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="YacaCode MC">
+  <meta name="theme-color" content="#0b0d09" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f6f8f2" media="(prefers-color-scheme: light)">
+  <link rel="apple-touch-icon" href="/assets/yacacode-logo-256.png">
+  <script>
+    try {
+      const saved = localStorage.getItem('yacacode-panel-color-scheme');
+      if (saved === 'light' || saved === 'dark') {
+        document.querySelector('meta[name="color-scheme"]').content = saved;
+      }
+    } catch {}
+  </script>
+  <title>YacaCode | Painel Minecraft Server</title>
+  <link rel="icon" type="image/png" href="/assets/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <!-- =========================================================================
+       TELA DE LOGIN (OCULTA QUANDO AUTENTICADO)
+       ========================================================================= -->
+  <section id="login-screen" class="login-screen" aria-label="Autenticação do Painel YacaCode">
+    <div class="login-backdrop" aria-hidden="true"></div>
+    <div class="login-card">
+      <div class="login-brand">
+        <img src="/assets/yacacode-logo-256.png" alt="Logotipo da YacaCode" class="login-logo" width="68" height="68">
+        <div>
+          <span class="brand-badge">Minecraft Control Plane</span>
+          <h1 class="login-title">YacaCode</h1>
+          <p class="login-subtitle">Paper 26.3 • Java &amp; Bedrock • Orange Pi 4GB</p>
+        </div>
+      </div>
+
+      <div id="login-cf-pill" class="cf-pill hidden">
+        <span class="dot dot-ok" aria-hidden="true"></span>
+        <span id="login-cf-text">Conexão segura via Cloudflare Tunnel</span>
+      </div>
+
+      <form id="login-form" class="login-form" novalidate>
+        <div class="field">
+          <label for="login-user">Usuário administrador</label>
+          <input id="login-user" name="username" type="text" autocomplete="username" placeholder="admin" required autofocus>
+        </div>
+        <div class="field">
+          <label for="login-pass">Senha</label>
+          <input id="login-pass" name="password" type="password" autocomplete="current-password" placeholder="••••••••••••" required>
+        </div>
+        <p id="login-error" class="form-error hidden" role="alert"></p>
+        <button id="login-submit" type="submit" class="btn btn-primary btn-full">
+          Entrar no Painel
+        </button>
+      </form>
+
+      <footer class="login-footer">
+        <span>© 2026 YacaCode • yacacode.com</span>
+      </footer>
+    </div>
+  </section>
+
+  <!-- =========================================================================
+       APLICAÇÃO PRINCIPAL DO PAINEL ADMIN
+       ========================================================================= -->
+  <div id="app-shell" class="app-shell hidden">
+    <!-- Overlay mobile para sidebar -->
+    <div id="sidebar-overlay" class="sidebar-overlay hidden" aria-hidden="true"></div>
+
+    <!-- SIDEBAR DE NAVEGAÇÃO -->
+    <aside id="sidebar" class="sidebar" aria-label="Menu principal">
+      <div class="sidebar-brand">
+        <img src="/assets/yacacode-logo-256.png" alt="Logotipo da YacaCode" class="sidebar-logo" width="40" height="40">
+        <div class="sidebar-brand-text">
+          <strong id="brand-name">YacaCode</strong>
+          <small id="brand-edition">Paper 26.3 Crossplay</small>
+        </div>
+        <button id="btn-close-sidebar" type="button" class="icon-btn mobile-only" aria-label="Fechar menu">
+          ✕
+        </button>
+      </div>
+
+      <nav class="sidebar-nav" aria-label="Seções do painel">
+        <ul>
+          <li>
+            <button type="button" class="nav-item active" data-tab="overview">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
+              <span>Visão Geral</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="nav-item" data-tab="ai">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/><path d="M19 16l.9 2.1L22 19l-2.1.9L19 22l-.9-2.1L16 19l2.1-.9L19 16z"/></svg>
+              <span>Assistente IA</span>
+              <span id="nav-ai-badge" class="nav-badge nav-badge-ai">Gemini</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="nav-item" data-tab="console">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+              <span>Console ao Vivo</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="nav-item" data-tab="players">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              <span>Jogadores</span>
+              <span id="nav-players-badge" class="nav-badge">0</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="nav-item" data-tab="settings">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.85 1 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              <span>Configurações</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="nav-item" data-tab="plugins">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+              <span>Plugins &amp; Crossplay</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="nav-item" data-tab="files">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <span>Arquivos</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="nav-item" data-tab="backups">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+              <span>Backups</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="nav-item" data-tab="network">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+              <span>Domínio &amp; Cloudflare</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="nav-item" data-tab="users">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><circle cx="12" cy="10" r="3"/><path d="M7.5 17a5 5 0 0 1 9 0"/></svg>
+              <span>Usuários do Painel</span>
+              <span id="nav-users-badge" class="nav-badge hidden">1</span>
+            </button>
+          </li>
+        </ul>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-user-pill">
+          <strong id="sidebar-user-name">admin</strong>
+          <span id="sidebar-user-role" class="pill pill-accent">Admin</span>
+        </div>
+        <div class="sidebar-status-box">
+          <div class="status-row">
+            <span id="sidebar-status-dot" class="dot dot-warn" aria-hidden="true"></span>
+            <span id="sidebar-status-label">Carregando...</span>
+          </div>
+          <small id="sidebar-uptime">Orange Pi 4GB • ARM64</small>
+        </div>
+        <div class="sidebar-actions">
+          <button id="btn-theme-toggle" type="button" class="btn btn-ghost btn-sm" aria-label="Alternar tema claro e escuro">
+            <span class="theme-label-dark">☀ Claro</span>
+            <span class="theme-label-light">☾ Escuro</span>
+          </button>
+          <button id="btn-logout" type="button" class="btn btn-ghost btn-sm">Sair</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ÁREA DE CONTEÚDO -->
+    <div class="main-column">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button id="btn-open-sidebar" type="button" class="icon-btn mobile-only" aria-label="Abrir menu">
+            ☰
+          </button>
+          <div>
+            <h1 id="page-title" class="page-title">Visão Geral</h1>
+            <p id="page-subtitle" class="page-subtitle">Monitoramento 24/7 do servidor YacaCode</p>
+          </div>
+        </div>
+        <div class="topbar-right">
+          <span id="topbar-cf-badge" class="pill pill-info hidden">Cloudflare Tunnel</span>
+          <span id="topbar-temp-badge" class="pill pill-muted hidden">--°C</span>
+          <button id="btn-refresh-now" type="button" class="btn btn-secondary btn-sm">↻ Atualizar</button>
+        </div>
+      </header>
+
+      <main class="content">
+        <!-- ===================================================================
+             TAB 1: VISÃO GERAL
+             =================================================================== -->
+        <section id="tab-overview" class="tab-panel active" aria-labelledby="page-title">
+          <!-- Banner de Controle Principal -->
+          <article class="hero-card">
+            <div class="hero-left">
+              <div class="hero-icon-wrap">
+                <img src="/assets/yacacode-logo-256.png" alt="Ícone do servidor YacaCode" width="56" height="56">
+              </div>
+              <div>
+                <div class="hero-title-row">
+                  <h2 id="hero-server-name">YacaCode Minecraft</h2>
+                  <span id="hero-status-pill" class="pill pill-warn">Verificando...</span>
+                  <span id="hero-crossplay-pill" class="pill pill-accent">Java + Bedrock</span>
+                </div>
+                <p id="hero-meta" class="muted-text">PaperMC 26.3 (Java 25) • GeyserMC + Floodgate</p>
+              </div>
+            </div>
+            <div class="hero-controls">
+              <button type="button" class="btn btn-primary" data-power="start">▶ Iniciar</button>
+              <button type="button" class="btn btn-secondary" data-power="restart">↻ Reiniciar</button>
+              <button type="button" class="btn btn-danger-outline" data-power="stop">■ Parar</button>
+              <button id="btn-quick-save" type="button" class="btn btn-ghost">💾 Salvar</button>
+              <button id="btn-quick-backup" type="button" class="btn btn-ghost">📦 Backup</button>
+            </div>
+          </article>
+
+          <!-- Endereços de Conexão Java & Bedrock -->
+          <div class="grid-2">
+            <article class="card connection-card">
+              <div class="card-head">
+                <div>
+                  <span class="edition-tag edition-java">JAVA EDITION</span>
+                  <h3>PC (Windows, Mac, Linux)</h3>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm copy-btn" data-copy-target="conn-java-addr">Copiar IP</button>
+              </div>
+              <div class="addr-box">
+                <code id="conn-java-addr">mc.yacacode.com</code>
+                <small id="conn-java-port-note">Porta padrão 25565 (TCP) • Minecraft 26.3</small>
+              </div>
+            </article>
+
+            <article class="card connection-card">
+              <div class="card-head">
+                <div>
+                  <span class="edition-tag edition-bedrock">BEDROCK EDITION</span>
+                  <h3>Celular, Console &amp; Windows</h3>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm copy-btn" data-copy-target="conn-bedrock-addr">Copiar IP</button>
+              </div>
+              <div class="addr-box">
+                <code id="conn-bedrock-addr">mc.yacacode.com</code>
+                <small id="conn-bedrock-port-note">Porta: <strong>19132</strong> (TCP + UDP NetherNet) • Sem conta Java via Floodgate</small>
+              </div>
+            </article>
+          </div>
+
+          <!-- KPIs ao Vivo -->
+          <div class="kpi-grid">
+            <article class="kpi-card">
+              <span class="kpi-label">Jogadores Online</span>
+              <strong id="kpi-players" class="kpi-value">0 / 20</strong>
+              <small id="kpi-players-sub" class="kpi-sub">0 Java • 0 Bedrock</small>
+            </article>
+            <article class="kpi-card">
+              <span class="kpi-label">Desempenho (TPS)</span>
+              <strong id="kpi-tps" class="kpi-value">--</strong>
+              <small id="kpi-tps-sub" class="kpi-sub">Latência: -- ms</small>
+            </article>
+            <article class="kpi-card">
+              <span class="kpi-label">RAM Minecraft</span>
+              <strong id="kpi-mc-ram" class="kpi-value">-- MB</strong>
+              <div class="progress-track"><div id="bar-mc-ram" class="progress-fill" style="width:0%"></div></div>
+              <small id="kpi-mc-ram-sub" class="kpi-sub">Limite 3072 MB • Java 25</small>
+            </article>
+            <article class="kpi-card">
+              <span class="kpi-label">RAM Orange Pi 4GB</span>
+              <strong id="kpi-host-ram" class="kpi-value">--%</strong>
+              <div class="progress-track"><div id="bar-host-ram" class="progress-fill" style="width:0%"></div></div>
+              <small id="kpi-host-ram-sub" class="kpi-sub">Swap/ZRAM: --</small>
+            </article>
+            <article class="kpi-card">
+              <span class="kpi-label">CPU &amp; Temperatura</span>
+              <strong id="kpi-temp" class="kpi-value">--°C</strong>
+              <small id="kpi-cpu-sub" class="kpi-sub">CPU MC: --% • Load: --</small>
+            </article>
+            <article class="kpi-card">
+              <span class="kpi-label">Armazenamento</span>
+              <strong id="kpi-disk" class="kpi-value">--%</strong>
+              <div class="progress-track"><div id="bar-disk" class="progress-fill" style="width:0%"></div></div>
+              <small id="kpi-disk-sub" class="kpi-sub">Livre: -- GB</small>
+            </article>
+          </div>
+
+          <!-- Gráfico de Telemetria + Saúde da Stack 24/7 -->
+          <div class="grid-telemetry">
+            <article class="card telemetry-card">
+              <div class="card-head telemetry-head">
+                <div>
+                  <div class="telemetry-title-row">
+                    <h3>Telemetria em Tempo Real</h3>
+                    <span class="live-indicator"><i class="live-pulse"></i> AO VIVO</span>
+                  </div>
+                  <p id="telemetry-window-label" class="muted-text">Histórico de RAM (MB), CPU (%) e Temperatura (°C) do Orange Pi</p>
+                </div>
+                <div class="chart-legend-pills">
+                  <span class="legend-pill legend-ram">
+                    <i class="swatch swatch-primary"></i>
+                    <span>RAM MC</span>
+                    <strong id="legend-val-ram">-- MB</strong>
+                  </span>
+                  <span class="legend-pill legend-cpu">
+                    <i class="swatch swatch-accent"></i>
+                    <span>CPU</span>
+                    <strong id="legend-val-cpu">--%</strong>
+                  </span>
+                  <span class="legend-pill legend-temp">
+                    <i class="swatch swatch-temp"></i>
+                    <span>Temp</span>
+                    <strong id="legend-val-temp">--°C</strong>
+                  </span>
+                </div>
+              </div>
+
+              <div class="chart-stage">
+                <svg id="telemetry-chart" viewBox="0 0 720 250" role="img" aria-label="Gráfico de uso de memória RAM, CPU e Temperatura do servidor Minecraft"></svg>
+                <div id="chart-tooltip" class="chart-tooltip hidden" role="status" aria-live="polite"></div>
+              </div>
+
+              <div class="telemetry-footer-grid">
+                <div class="tele-stat">
+                  <span class="tele-stat-label">RAM Atual / Pico</span>
+                  <strong id="tele-stat-ram">-- / -- MB</strong>
+                </div>
+                <div class="tele-stat">
+                  <span class="tele-stat-label">CPU Média / Pico</span>
+                  <strong id="tele-stat-cpu">--% / --%</strong>
+                </div>
+                <div class="tele-stat">
+                  <span class="tele-stat-label">Faixa Térmica SoC</span>
+                  <strong id="tele-stat-temp">--°C – --°C</strong>
+                </div>
+                <div class="tele-stat">
+                  <span class="tele-stat-label">Tráfego Rede (RX / TX)</span>
+                  <strong id="tele-stat-net">↓ -- / ↑ --</strong>
+                </div>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="card-head">
+                <div>
+                  <h3>Serviços 24/7 (Docker Stack)</h3>
+                  <p class="muted-text">Saúde automática dos containers no Orange Pi</p>
+                </div>
+              </div>
+              <ul id="stack-list" class="stack-list">
+                <li class="muted-text">Carregando serviços...</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <!-- ===================================================================
+             TAB 1B: ASSISTENTE IA (GEMINI)
+             =================================================================== -->
+        <section id="tab-ai" class="tab-panel" aria-label="Chat Assistente IA Gemini">
+          <article class="card ai-card">
+            <div class="ai-toolbar">
+              <div class="ai-toolbar-left">
+                <span id="ai-status-dot" class="dot dot-warn" aria-hidden="true"></span>
+                <div>
+                  <div class="ai-title-row">
+                    <strong>YacaCode AI</strong>
+                    <span id="ai-model-pill" class="pill pill-accent">gemini-3.5-flash-lite</span>
+                    <span id="ai-perm-pill" class="pill pill-muted">Verificando...</span>
+                    <span id="ai-ingame-pill" class="pill pill-info hidden">Chat no jogo: Jorge</span>
+                  </div>
+                  <small id="ai-status-sub" class="muted-text">Conectado ao servidor Minecraft via Function Calling</small>
+                </div>
+              </div>
+              <div class="ai-toolbar-actions">
+                <button id="btn-ai-config" type="button" class="btn btn-secondary btn-sm hidden">⚙ Configurar IA</button>
+                <button id="btn-ai-clear" type="button" class="btn btn-ghost btn-sm">Limpar chat</button>
+              </div>
+            </div>
+
+            <div id="ai-setup-banner" class="ai-setup-banner hidden">
+              <div>
+                <strong>API Key do Gemini ainda não configurada</strong>
+                <p id="ai-setup-desc" class="muted-text">
+                  Cadastre sua chave gratuita do Google AI Studio para ativar o assistente IA no painel.
+                </p>
+              </div>
+              <button id="btn-ai-setup-now" type="button" class="btn btn-primary btn-sm hidden">Configurar Chave API</button>
+            </div>
+
+            <div id="ai-messages" class="ai-messages" role="log" aria-live="polite" aria-label="Conversa com o Assistente IA"></div>
+
+            <div class="ai-suggestions" aria-label="Sugestões rápidas">
+              <button type="button" class="chip-btn" data-ai-prompt="Quem está online agora e em qual nível de XP?">Quem tá online e nível?</button>
+              <button type="button" class="chip-btn" data-ai-prompt="Deixe de dia e limpe o clima agora.">Deixar de dia e limpar clima</button>
+              <button type="button" class="chip-btn" data-ai-prompt="Como está a saúde do servidor agora (CPU, RAM, temperatura e uptime)?">Saúde do servidor</button>
+              <button type="button" class="chip-btn" data-ai-prompt="Resuma o que aconteceu nos últimos logs do servidor.">Resumo dos logs</button>
+            </div>
+
+            <form id="ai-chat-form" class="ai-input-row">
+              <label for="ai-chat-input" class="sr-only">Mensagem para o Assistente IA Gemini</label>
+              <textarea id="ai-chat-input" rows="1" placeholder="Pergunte algo ou peça uma ação (ex: quem tá online? deixe de dia, dê OP para Nycolazs)..." autocomplete="off"></textarea>
+              <button id="btn-ai-send" type="submit" class="btn btn-primary">Enviar</button>
+            </form>
+          </article>
+        </section>
+
+        <!-- ===================================================================
+             TAB 2: CONSOLE AO VIVO
+             =================================================================== -->
+        <section id="tab-console" class="tab-panel" aria-label="Console interativo ao vivo">
+          <article class="card console-card">
+            <div class="console-toolbar">
+              <div class="console-status-group">
+                <span id="sse-dot" class="dot dot-warn" aria-hidden="true"></span>
+                <strong id="sse-status">Desconectado</strong>
+              </div>
+              <search class="console-search">
+                <label for="console-filter" class="sr-only">Filtrar logs</label>
+                <input id="console-filter" type="search" placeholder="Filtrar logs (ex: Geyser, WARN, ERROR, joined)...">
+              </search>
+              <div class="console-tools">
+                <label class="checkbox-inline">
+                  <input id="console-autoscroll" type="checkbox" checked>
+                  <span>Auto-scroll</span>
+                </label>
+                <button id="btn-console-clear" type="button" class="btn btn-ghost btn-sm">Limpar</button>
+                <button id="btn-console-reconnect" type="button" class="btn btn-secondary btn-sm">Reconectar</button>
+              </div>
+            </div>
+
+            <div class="quick-commands" aria-label="Comandos rápidos">
+              <button type="button" class="chip-btn" data-quick-cmd="list">list</button>
+              <button type="button" class="chip-btn" data-quick-cmd="tps">tps</button>
+              <button type="button" class="chip-btn" data-quick-cmd="save-all">save-all</button>
+              <button type="button" class="chip-btn" data-quick-cmd="time set day">time set day</button>
+              <button type="button" class="chip-btn" data-quick-cmd="weather clear">weather clear</button>
+              <button type="button" class="chip-btn" data-quick-cmd="whitelist reload">whitelist reload</button>
+              <button type="button" class="chip-btn" data-quick-cmd="geyser version">geyser version</button>
+              <button type="button" class="chip-btn" data-quick-cmd="spark health">spark health</button>
+            </div>
+
+            <div id="console-output" class="console-output" role="log" aria-live="polite" aria-label="Saída de logs do servidor"></div>
+
+            <form id="console-form" class="console-input-row">
+              <span class="console-prompt" aria-hidden="true">&gt;</span>
+              <label for="console-input" class="sr-only">Enviar comando RCON</label>
+              <input id="console-input" type="text" placeholder="Digite um comando do Minecraft (ex: say Olá YacaCode!, op Jogador, chunky start)..." autocomplete="off">
+              <button type="submit" class="btn btn-primary">Enviar</button>
+            </form>
+          </article>
+        </section>
+
+        <!-- ===================================================================
+             TAB 3: JOGADORES
+             =================================================================== -->
+        <section id="tab-players" class="tab-panel" aria-label="Gerenciamento de jogadores">
+          <article class="card">
+            <div class="card-head">
+              <div>
+                <h3>Aviso Global no Chat</h3>
+                <p class="muted-text">Envia uma mensagem para todos os jogadores Java e Bedrock conectados</p>
+              </div>
+            </div>
+            <form id="broadcast-form" class="inline-form">
+              <label for="broadcast-input" class="sr-only">Mensagem global</label>
+              <input id="broadcast-input" type="text" placeholder="Ex: Reinício rápido em 5 minutos para atualização!" required>
+              <button type="submit" class="btn btn-primary">Enviar Aviso</button>
+            </form>
+          </article>
+
+          <article class="card">
+            <div class="card-head">
+              <div>
+                <h3>Jogadores Conectados Agora</h3>
+                <p id="players-online-subtitle" class="muted-text">0 jogadores conectados</p>
+              </div>
+              <button id="btn-reload-players" type="button" class="btn btn-secondary btn-sm">↻ Atualizar</button>
+            </div>
+            <div id="online-players-list" class="players-grid"></div>
+          </article>
+
+          <div class="grid-3">
+            <!-- Whitelist -->
+            <article class="card">
+              <div class="card-head">
+                <div>
+                  <h3>Whitelist</h3>
+                  <p id="whitelist-state-label" class="muted-text">Desativada</p>
+                </div>
+                <button id="btn-toggle-whitelist" type="button" class="btn btn-secondary btn-sm">Ativar</button>
+              </div>
+              <form id="whitelist-add-form" class="inline-form compact-form">
+                <label for="whitelist-player-input" class="sr-only">Jogador para Whitelist</label>
+                <input id="whitelist-player-input" type="text" placeholder="Nick Java ou .NickBedrock" required>
+                <button type="submit" class="btn btn-primary btn-sm">Adicionar</button>
+              </form>
+              <p class="hint-text">Para jogadores Bedrock (Floodgate), use ponto antes do gamertag (ex: <code>.Steve</code>).</p>
+              <ul id="whitelist-list" class="entity-list"></ul>
+            </article>
+
+            <!-- OPs -->
+            <article class="card">
+              <div class="card-head">
+                <div>
+                  <h3>Operadores (OP)</h3>
+                  <p class="muted-text">Administradores dentro do jogo</p>
+                </div>
+              </div>
+              <form id="op-add-form" class="inline-form compact-form">
+                <label for="op-player-input" class="sr-only">Jogador para OP</label>
+                <input id="op-player-input" type="text" placeholder="Nick do jogador" required>
+                <button type="submit" class="btn btn-primary btn-sm">Dar OP</button>
+              </form>
+              <ul id="ops-list" class="entity-list"></ul>
+            </article>
+
+            <!-- Banidos -->
+            <article class="card">
+              <div class="card-head">
+                <div>
+                  <h3>Jogadores Banidos</h3>
+                  <p class="muted-text">Lista de banimentos ativos</p>
+                </div>
+              </div>
+              <form id="ban-add-form" class="inline-form compact-form">
+                <label for="ban-player-input" class="sr-only">Jogador para Banir</label>
+                <input id="ban-player-input" type="text" placeholder="Nick para banir" required>
+                <button type="submit" class="btn btn-danger-outline btn-sm">Banir</button>
+              </form>
+              <ul id="bans-list" class="entity-list"></ul>
+            </article>
+          </div>
+        </section>
+
+        <!-- ===================================================================
+             TAB 4: CONFIGURAÇÕES (SERVER.PROPERTIES + PRESETS ORANGE PI)
+             =================================================================== -->
+        <section id="tab-settings" class="tab-panel" aria-label="Configurações do servidor">
+          <article class="card preset-banner">
+            <div>
+              <span class="edition-tag edition-java">OTIMIZAÇÃO ORANGE PI 4GB + CROSSPLAY</span>
+              <h3>Preset Profissional YacaCode (Paper 26.3 + Geyser NetherNet)</h3>
+              <p class="muted-text">
+                Aplica automaticamente as otimizações de entidades, redstone (Alternate Current), spawn limits,
+                Spark profiler e configuração do GeyserMC (NetherNet TCP+UDP, Floodgate auth e MOTD YacaCode).
+                Crie backup automático <code>.bak</code> de cada YAML alterado.
+              </p>
+            </div>
+            <button id="btn-apply-presets" type="button" class="btn btn-primary">⚡ Aplicar Presets YacaCode</button>
+          </article>
+
+          <article class="card">
+            <div class="card-head">
+              <div>
+                <h3>Editor Visual — <code>server.properties</code></h3>
+                <p class="muted-text">Após salvar, reinicie o servidor para aplicar todas as alterações.</p>
+              </div>
+              <button id="btn-save-properties" type="button" class="btn btn-primary">Salvar Configurações</button>
+            </div>
+            <form id="properties-form" class="props-grid">
+              <div class="field span-2">
+                <label for="prop-motd">MOTD (Mensagem exibida na lista de servidores)</label>
+                <input id="prop-motd" data-prop="motd" type="text">
+              </div>
+              <div class="field">
+                <label for="prop-max-players">Máximo de Jogadores (recomendado 10–20 em 4GB RAM)</label>
+                <input id="prop-max-players" data-prop="max-players" type="number" min="1" max="100">
+              </div>
+              <div class="field">
+                <label for="prop-difficulty">Dificuldade</label>
+                <select id="prop-difficulty" data-prop="difficulty">
+                  <option value="peaceful">Pacífico (peaceful)</option>
+                  <option value="easy">Fácil (easy)</option>
+                  <option value="normal">Normal (normal)</option>
+                  <option value="hard">Difícil (hard)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="prop-gamemode">Modo de Jogo Padrão</label>
+                <select id="prop-gamemode" data-prop="gamemode">
+                  <option value="survival">Sobrevivência (survival)</option>
+                  <option value="creative">Criativo (creative)</option>
+                  <option value="adventure">Aventura (adventure)</option>
+                  <option value="spectator">Espectador (spectator)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="prop-view-distance">View Distance (Chunks visíveis — ideal 6 a 8 no Orange Pi)</label>
+                <input id="prop-view-distance" data-prop="view-distance" type="number" min="4" max="16">
+              </div>
+              <div class="field">
+                <label for="prop-sim-distance">Simulation Distance (Chunks ativos — ideal 5 a 6)</label>
+                <input id="prop-sim-distance" data-prop="simulation-distance" type="number" min="4" max="12">
+              </div>
+              <div class="field">
+                <label for="prop-spawn-protection">Proteção de Spawn (blocos de raio)</label>
+                <input id="prop-spawn-protection" data-prop="spawn-protection" type="number" min="0" max="64">
+              </div>
+              <div class="field">
+                <label for="prop-pvp">PvP entre Jogadores</label>
+                <select id="prop-pvp" data-prop="pvp">
+                  <option value="true">Ativado</option>
+                  <option value="false">Desativado</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="prop-online-mode">Online Mode (Contas Originais Java; Bedrock entra via Floodgate)</label>
+                <select id="prop-online-mode" data-prop="online-mode">
+                  <option value="true">Ativado (Recomendado / Seguro)</option>
+                  <option value="false">Desativado (Modo Offline)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="prop-whitelist">Whitelist (Apenas jogadores autorizados)</label>
+                <select id="prop-whitelist" data-prop="white-list">
+                  <option value="false">Desativada (Aberto)</option>
+                  <option value="true">Ativada (Privado)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="prop-allow-nether">Permitir Nether</label>
+                <select id="prop-allow-nether" data-prop="allow-nether">
+                  <option value="true">Sim</option>
+                  <option value="false">Não</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="prop-allow-flight">Permitir Voo (evita kick falso em Bedrock/Elytra)</label>
+                <select id="prop-allow-flight" data-prop="allow-flight">
+                  <option value="true">Sim</option>
+                  <option value="false">Não</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="prop-level-seed">Seed do Mundo (somente para novos mundos)</label>
+                <input id="prop-level-seed" data-prop="level-seed" type="text" placeholder="Aleatória se vazio">
+              </div>
+            </form>
+          </article>
+        </section>
+
+        <!-- ===================================================================
+             TAB 5: PLUGINS & CROSSPLAY
+             =================================================================== -->
+        <section id="tab-plugins" class="tab-panel" aria-label="Gerenciamento de plugins">
+          <div class="grid-2">
+            <article class="card">
+              <div class="card-head">
+                <div>
+                  <h3>Status Crossplay (Java + Bedrock)</h3>
+                  <p class="muted-text">GeyserMC + Floodgate instalados automaticamente</p>
+                </div>
+              </div>
+              <ul id="crossplay-checklist" class="checklist"></ul>
+            </article>
+
+            <article class="card">
+              <div class="card-head">
+                <div>
+                  <h3>Instalar Novo Plugin (.jar)</h3>
+                  <p class="muted-text">Envie plugins Paper/Spigot compatíveis com Minecraft 26.3</p>
+                </div>
+              </div>
+              <div id="plugin-dropzone" class="dropzone">
+                <input id="plugin-file-input" type="file" accept=".jar" class="sr-only">
+                <p>Arraste um arquivo <code>.jar</code> aqui ou</p>
+                <button id="btn-select-plugin" type="button" class="btn btn-secondary btn-sm">Selecionar .jar</button>
+                <small id="plugin-upload-status" class="muted-text">Máximo 100 MB • Reinicie o servidor após enviar</small>
+              </div>
+            </article>
+          </div>
+
+          <article class="card">
+            <div class="card-head">
+              <div>
+                <h3>Plugins Instalados em <code>/data/plugins</code></h3>
+                <p id="plugins-count-label" class="muted-text">Carregando...</p>
+              </div>
+              <button id="btn-reload-plugins" type="button" class="btn btn-secondary btn-sm">↻ Atualizar</button>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Plugin</th>
+                    <th>Status</th>
+                    <th>Tamanho</th>
+                    <th>Modificado</th>
+                    <th class="text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="plugins-tbody"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <!-- ===================================================================
+             TAB 6: ARQUIVOS
+             =================================================================== -->
+        <section id="tab-files" class="tab-panel" aria-label="Gerenciador de arquivos do servidor">
+          <article class="card">
+            <div class="files-toolbar">
+              <nav id="files-breadcrumb" class="breadcrumb" aria-label="Caminho da pasta"></nav>
+              <div class="files-actions">
+                <button id="btn-files-mkdir" type="button" class="btn btn-secondary btn-sm">+ Nova Pasta</button>
+                <button id="btn-files-refresh" type="button" class="btn btn-ghost btn-sm">↻ Atualizar</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Nome</th>
+                    <th>Tamanho</th>
+                    <th>Modificado</th>
+                    <th class="text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="files-tbody"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <!-- ===================================================================
+             TAB 7: BACKUPS (GOOGLE DRIVE PESSOAL — INTERFACE ULTRA SIMPLES)
+             =================================================================== -->
+        <section id="tab-backups" class="tab-panel" aria-label="Gerenciamento de backups">
+          <!-- Estado Desconectado: 1 botão limpo para conectar -->
+          <article class="card gd-hero-empty" id="gd-empty-state">
+            <div class="gd-hero-icon" aria-hidden="true">☁</div>
+            <div class="gd-hero-copy">
+              <h3>Backup automático no Google Drive</h3>
+              <p id="gd-empty-desc" class="muted-text">
+                Envie cópias seguras do seu mundo direto para o seu Google Drive pessoal — zero espaço ocupado no Orange Pi.
+              </p>
+            </div>
+            <div class="gd-hero-actions">
+              <button id="btn-gd-quick-connect" type="button" class="btn btn-primary">🔗 Conectar com Google Drive</button>
+              <button id="btn-gd-open-creds" type="button" class="btn btn-ghost btn-sm hidden">Alterar credenciais</button>
+            </div>
+            <p id="gd-empty-error" class="form-error hidden" role="alert"></p>
+          </article>
+
+          <!-- Estado Conectado: resumo limpo + 1 clique para backup + modal de opções -->
+          <article class="card gdrive-card hidden" id="gd-connected-card">
+            <div class="card-head">
+              <div>
+                <div class="ai-title-row">
+                  <h3>Google Drive</h3>
+                  <span id="gd-status-pill" class="pill pill-ok">● Conectado</span>
+                  <span id="gd-auto-pill" class="pill pill-info hidden">Auto • 24h</span>
+                </div>
+                <p id="gd-account-summary" class="muted-text">Conta conectada</p>
+              </div>
+              <div class="hero-controls">
+                <button id="btn-backup-now" type="button" class="btn btn-primary">☁ Fazer Backup Agora</button>
+                <a id="gd-open-folder-link" class="btn btn-secondary btn-sm hidden" href="#" target="_blank" rel="noopener noreferrer">↗ Abrir Pasta</a>
+                <button id="btn-gd-options" type="button" class="btn btn-ghost btn-sm hidden">⚙ Opções</button>
+              </div>
+            </div>
+
+            <div id="gd-progress-box" class="gd-progress-box hidden" role="status" aria-live="polite">
+              <div class="gd-progress-head">
+                <strong id="gd-progress-stage">Preparando backup...</strong>
+                <span id="gd-progress-pct" class="mono-val gd-progress-pct">0%</span>
+              </div>
+              <div class="gd-progress-track">
+                <div id="gd-progress-bar" class="gd-progress-fill" style="width:0%"></div>
+              </div>
+              <small id="gd-progress-detail" class="muted-text">Aguardando início...</small>
+            </div>
+
+            <div class="gd-metrics-row">
+              <div class="gd-metric">
+                <span class="tele-stat-label">Último backup</span>
+                <strong id="gd-last-upload">—</strong>
+              </div>
+              <div class="gd-metric">
+                <span class="tele-stat-label">Próximo automático</span>
+                <strong id="gd-next-schedule">Manual</strong>
+              </div>
+              <div class="gd-metric">
+                <span class="tele-stat-label">Espaço no Drive</span>
+                <strong id="gd-quota-text">—</strong>
+              </div>
+            </div>
+
+            <p id="gd-last-error" class="form-error hidden" role="alert"></p>
+          </article>
+
+          <!-- Backups na Nuvem (Google Drive) -->
+          <article class="card hidden" id="gdrive-files-card">
+            <div class="card-head">
+              <div>
+                <h3>Backups Salvos no Google Drive</h3>
+                <p id="gd-files-subtitle" class="muted-text">Sincronizados na nuvem</p>
+              </div>
+              <button id="btn-reload-gdrive" type="button" class="btn btn-secondary btn-sm">↻ Atualizar</button>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Arquivo na Nuvem</th>
+                    <th>Enviado em</th>
+                    <th>Tamanho</th>
+                    <th class="text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="gdrive-files-tbody"></tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="card hidden" id="local-backups-card">
+            <div class="card-head">
+              <div>
+                <h3>Arquivos Locais Residuais no Orange Pi</h3>
+                <p class="muted-text">Backups antigos encontrados em <code>./backups</code></p>
+              </div>
+              <button id="btn-reload-backups" type="button" class="btn btn-secondary btn-sm">↻ Atualizar</button>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Arquivo</th>
+                    <th>Data</th>
+                    <th>Tamanho</th>
+                    <th class="text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="backups-tbody"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <!-- ===================================================================
+             TAB 8: DOMÍNIO & CLOUDFLARE
+             =================================================================== -->
+        <section id="tab-network" class="tab-panel" aria-label="Domínio, DNS e Cloudflare">
+          <div class="kpi-grid grid-4-cols">
+            <article class="kpi-card">
+              <span class="kpi-label">IP Público do Orange Pi</span>
+              <strong id="net-public-ip" class="kpi-value mono-val">--</strong>
+              <small class="kpi-sub">Detectado via Cloudflare</small>
+            </article>
+            <article class="kpi-card">
+              <span class="kpi-label">DNS do Domínio</span>
+              <strong id="net-domain-ip" class="kpi-value mono-val">--</strong>
+              <small id="net-dns-sync" class="kpi-sub">Verificando...</small>
+            </article>
+            <article class="kpi-card">
+              <span class="kpi-label">Cloudflare Tunnel</span>
+              <strong id="net-tunnel-state" class="kpi-value">--</strong>
+              <small id="net-panel-domain" class="kpi-sub">painel.yacacode.com</small>
+            </article>
+            <article class="kpi-card">
+              <span class="kpi-label">Cloudflare DDNS</span>
+              <strong id="net-ddns-state" class="kpi-value">--</strong>
+              <small class="kpi-sub">Atualiza a cada 5 min</small>
+            </article>
+          </div>
+
+          <article class="card">
+            <div class="card-head">
+              <div>
+                <h3>Mapa de Rede &amp; DNS Cloudflare</h3>
+                <p class="muted-text">Resumo técnico das regras necessárias para Java, Bedrock e Painel Admin</p>
+              </div>
+              <button id="btn-refresh-network" type="button" class="btn btn-secondary btn-sm">↻ Testar DNS Agora</button>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Finalidade</th>
+                    <th>Tipo / Destino</th>
+                    <th>Porta / Protocolo</th>
+                    <th>Proxy Cloudflare</th>
+                  </tr>
+                </thead>
+                <tbody id="network-rules-tbody"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <!-- ===================================================================
+             TAB 9: USUÁRIOS DO PAINEL & PERMISSÕES (RBAC)
+             =================================================================== -->
+        <section id="tab-users" class="tab-panel" aria-label="Usuários e permissões do painel">
+          <div id="users-admin-area" class="users-admin-area">
+            <div class="grid-2">
+              <article class="card">
+                <div class="card-head">
+                  <div>
+                    <h3>Adicionar Novo Usuário</h3>
+                    <p class="muted-text">Crie contas com senha própria (hash <code>scrypt</code>) e controle de cargo</p>
+                  </div>
+                </div>
+                <form id="create-user-form" class="props-grid">
+                  <div class="field">
+                    <label for="new-user-username">Usuário (login)</label>
+                    <input id="new-user-username" type="text" placeholder="ex: joao.mod" minlength="3" maxlength="32" required>
+                  </div>
+                  <div class="field">
+                    <label for="new-user-display">Nome de exibição</label>
+                    <input id="new-user-display" type="text" placeholder="ex: João Silva" maxlength="48">
+                  </div>
+                  <div class="field">
+                    <label for="new-user-role">Nível de Permissão</label>
+                    <select id="new-user-role">
+                      <option value="moderator">Moderador (Console, Jogadores, Start/Restart)</option>
+                      <option value="viewer">Visualizador (Somente leitura / Status)</option>
+                      <option value="admin">Administrador (Acesso total ao painel)</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="new-user-password">Senha (mín. 6 caracteres)</label>
+                    <div class="inline-form">
+                      <input id="new-user-password" type="text" placeholder="Senha forte" minlength="6" required>
+                      <button id="btn-gen-pass" type="button" class="btn btn-secondary btn-sm">Gerar</button>
+                    </div>
+                  </div>
+                  <div class="span-2">
+                    <button type="submit" class="btn btn-primary">+ Criar Usuário no Painel</button>
+                  </div>
+                </form>
+              </article>
+
+              <article class="card">
+                <div class="card-head">
+                  <div>
+                    <h3>Alterar Minha Senha</h3>
+                    <p class="muted-text">Atualize a senha da sua conta logada com segurança</p>
+                  </div>
+                </div>
+                <form id="change-own-pass-form" class="login-form">
+                  <div class="field">
+                    <label for="own-current-pass">Senha atual</label>
+                    <input id="own-current-pass" type="password" autocomplete="current-password" required>
+                  </div>
+                  <div class="field">
+                    <label for="own-new-pass">Nova senha (mín. 6 caracteres)</label>
+                    <input id="own-new-pass" type="password" autocomplete="new-password" minlength="6" required>
+                  </div>
+                  <button type="submit" class="btn btn-secondary">Atualizar Minha Senha</button>
+                </form>
+              </article>
+            </div>
+
+            <article class="card">
+              <div class="card-head">
+                <div>
+                  <h3>Contas com Acesso ao Painel</h3>
+                  <p id="users-count-label" class="muted-text">Carregando usuários...</p>
+                </div>
+                <button id="btn-reload-users" type="button" class="btn btn-secondary btn-sm">↻ Atualizar</button>
+              </div>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Usuário</th>
+                      <th>Cargo / Permissão</th>
+                      <th>Status</th>
+                      <th>Último Acesso</th>
+                      <th class="text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody id="users-tbody"></tbody>
+                </table>
+              </div>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- Barra de Navegação Inferior Mobile (estilo app iOS) -->
+    <nav id="mobile-bottom-nav" class="mobile-bottom-nav" aria-label="Navegação rápida mobile">
+      <button type="button" class="mobile-nav-btn active" data-tab="overview">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
+        <span>Início</span>
+      </button>
+      <button type="button" class="mobile-nav-btn" data-tab="ai">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/></svg>
+        <span>Jorge IA</span>
+      </button>
+      <button type="button" class="mobile-nav-btn" data-tab="players">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+        <span>Jogadores</span>
+      </button>
+      <button type="button" class="mobile-nav-btn" data-tab="backups">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+        <span>Backups</span>
+      </button>
+      <button type="button" class="mobile-nav-btn" id="btn-mobile-more">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+        <span>Menu</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- =========================================================================
+       MODAIS NATIVOS <dialog> (Conforme modern-web-guidance)
+       ========================================================================= -->
+  <dialog id="confirm-dialog" class="modal-dialog" closedby="closerequest" aria-labelledby="confirm-title">
+    <h2 id="confirm-title" class="modal-title">Confirmar ação</h2>
+    <p id="confirm-message" class="modal-body"></p>
+    <form method="dialog" class="modal-actions">
+      <button value="cancel" class="btn btn-secondary" autofocus>Cancelar</button>
+      <button id="confirm-ok-btn" value="confirm" class="btn btn-danger">Confirmar</button>
+    </form>
+  </dialog>
+
+  <dialog id="editor-dialog" class="modal-dialog modal-wide" closedby="closerequest" aria-labelledby="editor-title">
+    <div class="modal-header">
+      <div>
+        <h2 id="editor-title" class="modal-title">Editar arquivo</h2>
+        <small id="editor-path" class="muted-text mono-val"></small>
+      </div>
+      <button type="button" id="btn-editor-close" class="icon-btn" aria-label="Fechar editor">✕</button>
+    </div>
+    <label for="editor-textarea" class="sr-only">Conteúdo do arquivo</label>
+    <textarea id="editor-textarea" class="code-editor" spellcheck="false"></textarea>
+    <div class="modal-actions">
+      <button type="button" id="btn-editor-cancel" class="btn btn-secondary">Cancelar</button>
+      <button type="button" id="btn-editor-save" class="btn btn-primary">Salvar Arquivo (Ctrl+S)</button>
+    </div>
+  </dialog>
+
+  <dialog id="prompt-dialog" class="modal-dialog" closedby="any" aria-labelledby="prompt-title">
+    <h2 id="prompt-title" class="modal-title">Informação</h2>
+    <p id="prompt-message" class="modal-body"></p>
+    <form method="dialog" id="prompt-form">
+      <div class="field">
+        <label for="prompt-input" class="sr-only">Valor</label>
+        <input id="prompt-input" type="text" required autofocus>
+      </div>
+      <div class="modal-actions">
+        <button value="cancel" type="submit" formnovalidate class="btn btn-secondary">Cancelar</button>
+        <button value="confirm" type="submit" class="btn btn-primary">Confirmar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="ai-config-dialog" class="modal-dialog" closedby="closerequest" aria-labelledby="ai-config-title">
+    <div class="modal-header">
+      <div>
+        <h2 id="ai-config-title" class="modal-title">Configurar Assistente IA (Gemini)</h2>
+        <small id="ai-config-current" class="muted-text">Chave armazenada com permissão restrita (0600) no Orange Pi</small>
+      </div>
+      <button type="button" id="btn-ai-config-close" class="icon-btn" aria-label="Fechar">✕</button>
+    </div>
+    <form id="ai-config-form" class="login-form">
+      <div class="field">
+        <label for="ai-config-key">Gemini API Key (Google AI Studio)</label>
+        <input id="ai-config-key" type="password" placeholder="AIzaSy... (deixe vazio para manter a atual)" autocomplete="off">
+        <small class="hint-text">Crie gratuitamente em <code>aistudio.google.com/apikey</code></small>
+      </div>
+      <div class="field">
+        <label for="ai-config-model">Modelo Gemini</label>
+        <select id="ai-config-model">
+          <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite (Ultra rápido • Recomendado)</option>
+          <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (Ultra rápido)</option>
+          <option value="gemini-3.8-flash">Gemini 3.8 Flash (Mais avançado)</option>
+          <option value="gemini-flash-lite-latest">Gemini Flash-Lite Latest (Sempre atualizado)</option>
+          <option value="gemini-flash-latest">Gemini Flash Latest (Sempre atualizado)</option>
+        </select>
+      </div>
+      <label class="checkbox-inline">
+        <input id="ai-config-ingame" type="checkbox" checked>
+        <span>Ativar <strong>Jorge</strong> no chat global do jogo (responde quando chamam "Jorge" — somente dúvidas/conversa, sem executar comandos)</span>
+      </label>
+      <div class="modal-actions">
+        <button type="button" id="btn-ai-config-cancel" class="btn btn-secondary">Cancelar</button>
+        <button type="submit" id="btn-ai-config-save" class="btn btn-primary">Salvar Configuração</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Modal 1: Conectar Google Drive (1ª vez / importar JSON) -->
+  <dialog id="gdrive-connect-dialog" class="modal-dialog" closedby="closerequest" aria-labelledby="gd-connect-title">
+    <div class="modal-header">
+      <div>
+        <h2 id="gd-connect-title" class="modal-title">Conectar Google Drive</h2>
+        <small class="muted-text">Configuração única • depois vira 1 clique</small>
+      </div>
+      <button type="button" id="btn-gd-connect-close" class="icon-btn" aria-label="Fechar">✕</button>
+    </div>
+    <form id="gdrive-connect-form" class="login-form">
+      <div class="gd-json-pick">
+        <input id="gd-json-file" type="file" accept=".json,application/json" class="sr-only">
+        <button type="button" id="btn-gd-pick-json" class="btn btn-secondary btn-full">📄 Importar arquivo JSON do Google Cloud</button>
+        <small id="gd-json-status" class="hint-text">Baixou o <code>client_secret_*.json</code>? Só selecionar aqui que preenche tudo sozinho.</small>
+      </div>
+
+      <div class="field">
+        <label for="gd-client-id">Ou cole o Client ID</label>
+        <input id="gd-client-id" type="text" placeholder="1234567890-xxxx.apps.googleusercontent.com" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="gd-client-secret">Client Secret</label>
+        <input id="gd-client-secret" type="password" placeholder="GOCSPX-..." autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="gd-redirect-uri">URL de retorno (para cadastrar no Google Cloud)</label>
+        <div class="inline-form">
+          <input id="gd-redirect-uri" type="text" class="mono-val" readonly>
+          <button type="button" id="btn-copy-gd-redirect" class="btn btn-secondary btn-sm">Copiar</button>
+        </div>
+      </div>
+
+      <details class="gd-guide">
+        <summary>Passo a passo rápido (4 cliques no Google Cloud)</summary>
+        <ol>
+          <li>Em <code>console.cloud.google.com</code>, ative a <strong>Google Drive API</strong>.</li>
+          <li>Em <strong>Google Auth Platform → Público-alvo</strong>, marque <strong>Externo</strong> e adicione seu Gmail em <strong>Usuários de teste</strong>.</li>
+          <li>Em <strong>Clientes → Criar cliente OAuth → Aplicativo da Web</strong>, cole a URL de retorno acima.</li>
+          <li>Baixe o JSON e clique em <strong>Importar arquivo JSON</strong> acima.</li>
+        </ol>
+      </details>
+
+      <div class="modal-actions">
+        <button type="button" id="btn-gd-connect-cancel" class="btn btn-secondary">Cancelar</button>
+        <button type="submit" id="btn-gd-connect-go" class="btn btn-primary">Continuar para o Google →</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Modal 2: Opções do Google Drive (só quando conectado) -->
+  <dialog id="gdrive-options-dialog" class="modal-dialog" closedby="closerequest" aria-labelledby="gd-options-title">
+    <div class="modal-header">
+      <div>
+        <h2 id="gd-options-title" class="modal-title">Opções do Backup no Google Drive</h2>
+        <small id="gd-options-email" class="muted-text">Conta conectada</small>
+      </div>
+      <button type="button" id="btn-gd-options-close" class="icon-btn" aria-label="Fechar">✕</button>
+    </div>
+    <form id="gdrive-options-form" class="login-form">
+      <div class="field">
+        <label for="gd-folder-name">Pasta no Google Drive</label>
+        <input id="gd-folder-name" type="text" placeholder="YacaCode Minecraft Backups" maxlength="80">
+      </div>
+      <div class="field">
+        <label for="gd-schedule">Frequência automática</label>
+        <select id="gd-schedule">
+          <option value="0">Desativado (somente manual)</option>
+          <option value="6">A cada 6 horas</option>
+          <option value="12">A cada 12 horas</option>
+          <option value="24">Diário (a cada 24 horas)</option>
+          <option value="72">A cada 3 dias (72 horas)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="gd-max-backups">Manter últimos backups na nuvem</label>
+        <input id="gd-max-backups" type="number" min="1" max="100" value="10">
+      </div>
+      <label class="checkbox-inline">
+        <input id="gd-skip-idle" type="checkbox" checked>
+        <span>Pular backup automático se o mundo não mudou</span>
+      </label>
+      <div class="gd-options-footer">
+        <div class="row-actions">
+          <button type="button" id="btn-gd-test" class="btn btn-ghost btn-sm">Testar</button>
+          <button type="button" id="btn-gd-disconnect" class="btn btn-danger-outline btn-sm">Desconectar</button>
+        </div>
+        <div class="row-actions">
+          <button type="button" id="btn-gd-options-cancel" class="btn btn-secondary btn-sm">Cancelar</button>
+          <button type="submit" id="btn-gd-save" class="btn btn-primary btn-sm">Salvar</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Toast stack -->
+  <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

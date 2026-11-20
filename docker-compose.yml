@@ -1,0 +1,259 @@
+# ==============================================================================
+# YacaCode Minecraft Server — Stack Profissional 24/7 (Orange Pi 4GB ARM64)
+# ==============================================================================
+# Serviços:
+#   1. minecraft       : PaperMC 26.3 (Java 25) + GeyserMC + Floodgate + Chunky
+#   2. panel           : YacaCode Admin Panel (Node 22 Alpine, ~45MB RAM)
+#   3. cloudflared     : Cloudflare Tunnel (expõe o painel com HTTPS Zero Trust)
+#   4. cloudflare-ddns : Atualiza o registro A (DNS Only) do seu domínio no IP público
+#   5. backup          : Backups rotativos seguros coordenados via RCON
+# ==============================================================================
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. SERVIDOR MINECRAFT EM RUST (Pumpkin 0.2.2+26.3-26.63 — Java 26.3 + Bedrock NetherNet)
+  #    Boot em ~88ms | Consumo ~50-90MB RAM | Nativo ARM64 Multi-thread
+  # ----------------------------------------------------------------------------
+  minecraft:
+    build:
+      context: ./minecraft
+      dockerfile: Dockerfile.pumpkin
+    image: yacacode-pumpkin-rust:latest
+    container_name: yacacode-mc
+    restart: unless-stopped
+    tty: false
+    stdin_open: true
+    stop_grace_period: 30s
+    mem_limit: ${MC_RUST_MEM_LIMIT:-768m}
+    ports:
+      - "${MC_JAVA_PORT:-25565}:25565/tcp"       # Minecraft Java Edition (26.3)
+      - "${MC_BEDROCK_PORT:-19132}:19132/udp"    # Minecraft Bedrock (NetherNet ICE WebRTC)
+      - "${MC_BEDROCK_PORT:-19132}:19132/tcp"    # Minecraft Bedrock (NetherNet Signaling)
+      - "7551:7551/udp"                          # Minecraft Bedrock (NetherNet LAN Discovery)
+    environment:
+      TZ: "${TZ:-America/Fortaleza}"
+      RUST_BACKTRACE: "1"
+    volumes:
+      - ./minecraft/data:/data
+      - ./minecraft/server-icon.png:/assets/server-icon.png:ro
+    networks:
+      - yacacode-net
+    healthcheck:
+      test: ["CMD", "mc-health"]
+      start_period: 15s
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging: *default-logging
+
+  # ----------------------------------------------------------------------------
+  # 1B. (OPCIONAL) SERVIDOR PAPER JAVA 25 (Ativável com profile "paper-java")
+  # ----------------------------------------------------------------------------
+  minecraft-paper:
+    image: itzg/minecraft-server:java25
+    container_name: yacacode-mc-paper
+    profiles: ["paper-java"]
+    restart: unless-stopped
+    tty: true
+    stdin_open: true
+    stop_grace_period: 120s
+    mem_limit: ${MC_MEM_LIMIT:-2560m}
+    memswap_limit: 3584m
+    ports:
+      - "${MC_JAVA_PORT:-25565}:25565/tcp"
+      - "${MC_BEDROCK_PORT:-19132}:19132/udp"
+      - "${MC_BEDROCK_PORT:-19132}:19132/tcp"
+    environment:
+      EULA: "TRUE"
+      TYPE: "PAPER"
+      VERSION: "${MC_VERSION:-26.3}"
+      TZ: "${TZ:-America/Fortaleza}"
+      INIT_MEMORY: "${MC_INIT_MEMORY:-1024M}"
+      MAX_MEMORY: "${MC_MAX_MEMORY:-2048M}"
+      USE_AIKAR_FLAGS: "true"
+      JVM_OPTS: "-XX:+UseCompactObjectHeaders -XX:ActiveProcessorCount=4 -Dpaper.playerconnection.keepalive=60"
+      SERVER_NAME: "${SERVER_NAME:-YacaCode}"
+      MOTD: "${MC_MOTD:-\\u00A7a\\u00A7lYacaCode \\u00A78| \\u00A76Minecraft 26.3\\n\\u00A77Java & Bedrock Crossplay \\u00A78\\u2022 \\u00A7ayacacode.com}"
+      ICON: "/assets/server-icon.png"
+      OVERRIDE_ICON: "true"
+      DIFFICULTY: "${MC_DIFFICULTY:-normal}"
+      MODE: "${MC_GAMEMODE:-survival}"
+      MAX_PLAYERS: "${MC_MAX_PLAYERS:-6}"
+      VIEW_DISTANCE: "${MC_VIEW_DISTANCE:-6}"
+      SIMULATION_DISTANCE: "${MC_SIMULATION_DISTANCE:-4}"
+      ENTITY_BROADCAST_RANGE_PERCENTAGE: "75"
+      PAUSE_WHEN_EMPTY_SECONDS: "60"
+      PVP: "${MC_PVP:-true}"
+      ONLINE_MODE: "${MC_ONLINE_MODE:-true}"
+      ENABLE_WHITELIST: "${MC_WHITELIST:-false}"
+      ENFORCE_WHITELIST: "${MC_WHITELIST:-false}"
+      ALLOW_NETHER: "true"
+      SPAWN_PROTECTION: "0"
+      SYNC_CHUNK_WRITES: "false"
+      NETWORK_COMPRESSION_THRESHOLD: "512"
+      MAX_TICK_TIME: "120000"
+      STOP_SERVER_ANNOUNCE_DELAY: "10"
+      STOP_DURATION: "90"
+      ENABLE_RCON: "true"
+      RCON_PORT: "25575"
+      RCON_PASSWORD: "${RCON_PASSWORD:?Defina RCON_PASSWORD no arquivo .env}"
+      ENABLE_QUERY: "false"
+      PLUGINS: |
+        https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot
+        https://download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest/downloads/spigot
+      MODRINTH_PROJECTS: "${MC_MODRINTH_PLUGINS:-chunky}"
+      REMOVE_OLD_MODS: "true"
+    volumes:
+      - ./minecraft/data:/data
+      - ./minecraft/server-icon.png:/assets/server-icon.png:ro
+    networks:
+      - yacacode-net
+    logging: *default-logging
+
+  # ----------------------------------------------------------------------------
+  # 2. PAINEL ADMIN PROFISSIONAL YACACODE (Ultra-leve: ~45MB RAM)
+  # ----------------------------------------------------------------------------
+  panel:
+    build:
+      context: ./panel
+      dockerfile: Dockerfile
+    image: yacacode-mc-panel:latest
+    container_name: yacacode-panel
+    restart: unless-stopped
+    mem_limit: 192m
+    ports:
+      - "${PANEL_BIND_IP:-127.0.0.1}:${PANEL_PORT:-8080}:8080"
+    environment:
+      PORT: "8080"
+      TZ: "${TZ:-America/Fortaleza}"
+      SERVER_NAME: "${SERVER_NAME:-YacaCode}"
+      MC_VERSION: "${MC_VERSION:-26.3}"
+      MC_DOMAIN: "${MC_DOMAIN:-mc.yacacode.com}"
+      PANEL_DOMAIN: "${PANEL_DOMAIN:-painel.yacacode.com}"
+      MC_JAVA_PORT: "${MC_JAVA_PORT:-25565}"
+      MC_BEDROCK_PORT: "${MC_BEDROCK_PORT:-19132}"
+      MC_CONTAINER_NAME: "yacacode-mc"
+      BACKUP_CONTAINER_NAME: "yacacode-backup"
+      CLOUDFLARED_CONTAINER_NAME: "yacacode-cloudflared"
+      DDNS_CONTAINER_NAME: "yacacode-ddns"
+      RCON_HOST: "minecraft"
+      RCON_PORT: "25575"
+      RCON_PASSWORD: "${RCON_PASSWORD:?Defina RCON_PASSWORD no arquivo .env}"
+      MC_DATA_DIR: "/mc-data"
+      MC_BACKUPS_DIR: "/mc-backups"
+      MC_PRESETS_FILE: "/app/presets.json"
+      ADMIN_USER: "${PANEL_ADMIN_USER:-admin}"
+      ADMIN_PASSWORD_HASH: "${PANEL_ADMIN_PASSWORD_HASH:-}"
+      ADMIN_PASSWORD: "${PANEL_ADMIN_PASSWORD:-}"
+      SESSION_SECRET: "${PANEL_SESSION_SECRET:?Defina PANEL_SESSION_SECRET no arquivo .env}"
+      CF_ACCESS_ENABLED: "${CF_ACCESS_ENABLED:-false}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      GEMINI_MODEL: "${GEMINI_MODEL:-gemini-3.5-flash-lite}"
+      GDRIVE_CLIENT_ID: "${GDRIVE_CLIENT_ID:-}"
+      GDRIVE_CLIENT_SECRET: "${GDRIVE_CLIENT_SECRET:-}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./minecraft/data:/mc-data
+      - ./backups:/mc-backups
+      - ./minecraft/config/presets.json:/app/presets.json:ro
+      - /sys/class/thermal:/host/thermal:ro
+      - /proc/meminfo:/host/meminfo:ro
+      - /proc/loadavg:/host/loadavg:ro
+    networks:
+      - yacacode-net
+    depends_on:
+      - minecraft
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging: *default-logging
+
+  # ----------------------------------------------------------------------------
+  # 3. CLOUDFLARE TUNNEL (Expõe o Painel Admin na internet com HTTPS sem abrir portas)
+  # ----------------------------------------------------------------------------
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: yacacode-cloudflared
+    restart: unless-stopped
+    profiles: ["cloudflare"]
+    mem_limit: 96m
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    networks:
+      - yacacode-net
+    depends_on:
+      panel:
+        condition: service_healthy
+    logging: *default-logging
+
+  # ----------------------------------------------------------------------------
+  # 4. CLOUDFLARE DDNS (Conecta e mantém seu domínio sincronizado no IP do Orange Pi)
+  # ----------------------------------------------------------------------------
+  cloudflare-ddns:
+    image: favonia/cloudflare-ddns:1
+    container_name: yacacode-ddns
+    restart: unless-stopped
+    profiles: ["ddns"]
+    mem_limit: 48m
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      CLOUDFLARE_API_TOKEN: "${CLOUDFLARE_DNS_API_TOKEN}"
+      DOMAINS: "${MC_DOMAIN}"
+      PROXIED: "false"
+      IP4_PROVIDER: "cloudflare.doh"
+      IP6_PROVIDER: "${DDNS_IP6_PROVIDER:-none}"
+      UPDATE_CRON: "@every 5m"
+      TZ: "${TZ:-America/Fortaleza}"
+    networks:
+      - yacacode-net
+    logging: *default-logging
+
+  # ----------------------------------------------------------------------------
+  # 5. BACKUP AUTOMÁTICO 24/7 (RCON save-off -> save-all -> tar.gz -> save-on)
+  # ----------------------------------------------------------------------------
+  backup:
+    image: itzg/mc-backup:latest
+    container_name: yacacode-backup
+    restart: unless-stopped
+    profiles: ["backup"]
+    mem_limit: 192m
+    environment:
+      BACKUP_METHOD: "tar"
+      BACKUP_NAME: "yacacode-world"
+      BACKUP_INTERVAL: "${BACKUP_INTERVAL:-24h}"
+      INITIAL_DELAY: "10m"
+      PAUSE_IF_NO_PLAYERS: "true"
+      PRUNE_BACKUPS_DAYS: "${BACKUP_RETENTION_DAYS:-7}"
+      PRUNE_BACKUPS_COUNT: "${BACKUP_RETENTION_COUNT:-10}"
+      RCON_HOST: "minecraft"
+      RCON_PORT: "25575"
+      RCON_PASSWORD: "${RCON_PASSWORD}"
+      SRC_DIR: "/data"
+      DEST_DIR: "/backups"
+      EXCLUDES: "*.jar,cache,logs,libraries,versions"
+      TZ: "${TZ:-America/Fortaleza}"
+    volumes:
+      - ./minecraft/data:/data:ro
+      - ./backups:/backups
+    networks:
+      - yacacode-net
+    depends_on:
+      - minecraft
+    logging: *default-logging
+
+networks:
+  yacacode-net:
+    name: yacacode-net
+    driver: bridge
