@@ -33,8 +33,12 @@ const state = {
   cmdHistoryIdx: -1,
   pollTimer: null,
   aiStatus: null,
+  aiConversations: [],
+  aiActiveConversationId: null,
   aiMessages: [],
   aiSending: false,
+  aiSyncSse: null,
+  aiSyncReconnectTimer: null,
   aiThinkingPhase: 0,
   aiThinkingTimer: null,
   aiLastAnimatedIdx: -1,
@@ -224,6 +228,10 @@ function showLogin() {
   stopPolling();
   stopGdriveProgressPolling();
   disconnectSse();
+  disconnectAiSync();
+  state.aiConversations = [];
+  state.aiActiveConversationId = null;
+  state.aiMessages = [];
   $('#app-shell').classList.add('hidden');
   $('#login-screen').classList.remove('hidden');
   $('#login-pass').value = '';
@@ -269,6 +277,8 @@ function showApp(authData) {
   if (listCard) listCard.classList.toggle('hidden', !isAdmin);
 
   loadOverview();
+  loadAiConversations(true);
+  connectAiSync();
   if (isAdmin) loadUsers();
   startPolling();
 
@@ -353,7 +363,11 @@ function switchTab(tab) {
   closeMobileSidebar();
 
   if (tab === 'overview') loadOverview();
-  if (tab === 'ai') loadAiStatus();
+  if (tab === 'ai') {
+    loadAiStatus();
+    loadAiConversations(false);
+    connectAiSync();
+  }
   if (tab === 'console') connectSse();
   if (tab === 'players') loadPlayers();
   if (tab === 'settings') loadProperties();
@@ -2273,12 +2287,36 @@ function bindEvents() {
   const btnMobileMore = $('#btn-mobile-more');
   if (btnMobileMore) btnMobileMore.addEventListener('click', openMobileSidebar);
 
-  // Assistente IA Gemini
-  $('#btn-ai-clear').addEventListener('click', () => {
-    state.aiMessages = [];
-    state.aiLastAnimatedIdx = -1;
-    renderAiMessages();
-    toast('Conversa limpa.');
+  // Assistente IA Gemini (Histórico por usuário + Sync Real-Time)
+  $('#btn-ai-clear').addEventListener('click', () => startNewAiConversation());
+  const btnAiNew = $('#btn-ai-new-chat');
+  if (btnAiNew) btnAiNew.addEventListener('click', () => startNewAiConversation());
+  const btnAiHistToggle = $('#btn-ai-history-toggle');
+  if (btnAiHistToggle) {
+    btnAiHistToggle.addEventListener('click', () => {
+      $('#ai-history-pane')?.classList.toggle('is-open');
+    });
+  }
+  const aiHistList = $('#ai-history-list');
+  if (aiHistList) {
+    aiHistList.addEventListener('click', (e) => {
+      const delBtn = e.target.closest('[data-ai-conv-del]');
+      if (delBtn) {
+        e.stopPropagation();
+        deleteAiConversation(delBtn.dataset.aiConvDel);
+        return;
+      }
+      const selectBtn = e.target.closest('[data-ai-conv-id]');
+      if (selectBtn) {
+        selectAiConversation(selectBtn.dataset.aiConvId);
+        $('#ai-history-pane')?.classList.remove('is-open');
+      }
+    });
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && state.currentUser && state.activeTab === 'ai') {
+      loadAiConversations(false);
+    }
   });
   $('#btn-ai-config').addEventListener('click', openAiConfigModal);
   $('#btn-ai-setup-now').addEventListener('click', openAiConfigModal);
@@ -2367,6 +2405,175 @@ async function loadAiStatus() {
   } catch (err) {
     toast(`Erro ao carregar status da IA: ${err.message}`, 'error');
   }
+}
+
+function formatConvDate(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    const now = new Date();
+    const sameDay =
+      d.getFullYear() === now.getFullYear() &&
+      d.getMonth() === now.getMonth() &&
+      d.getDate() === now.getDate();
+    return sameDay
+      ? d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  } catch {
+    return '';
+  }
+}
+
+function renderAiConversationsList() {
+  const listEl = $('#ai-history-list');
+  const userEl = $('#ai-history-user');
+  if (userEl && state.currentUser?.username) {
+    userEl.textContent = `@${state.currentUser.username} • PC & Celular`;
+  }
+  if (!listEl) return;
+
+  if (!Array.isArray(state.aiConversations) || state.aiConversations.length === 0) {
+    listEl.innerHTML = `<div class="ai-history-empty">Nenhuma conversa salva ainda.<br>Envie uma mensagem para começar.</div>`;
+    return;
+  }
+
+  listEl.innerHTML = state.aiConversations
+    .map((c) => {
+      const isActive = c.id === state.aiActiveConversationId;
+      const meta = `${c.messageCount || 0} msg • ${formatConvDate(c.updatedAt)}`;
+      return `
+        <div class="ai-history-item${isActive ? ' is-active' : ''}" role="listitem" data-ai-conv-id="${escapeHtml(c.id)}">
+          <button type="button" class="ai-history-item-main" data-ai-conv-id="${escapeHtml(c.id)}">
+            <span class="ai-history-item-title">${escapeHtml(c.title || 'Nova conversa')}</span>
+            <span class="ai-history-item-meta">${escapeHtml(meta)}</span>
+          </button>
+          <button type="button" class="ai-history-del" data-ai-conv-del="${escapeHtml(c.id)}" title="Excluir conversa" aria-label="Excluir conversa">✕</button>
+        </div>
+      `;
+    })
+    .join('');
+}
+
+async function loadAiConversations(silent = true) {
+  try {
+    const data = await api('/api/ai/conversations');
+    state.aiConversations = Array.isArray(data.conversations) ? data.conversations : [];
+    const targetId =
+      state.aiActiveConversationId && state.aiConversations.some((c) => c.id === state.aiActiveConversationId)
+        ? state.aiActiveConversationId
+        : data.activeConversationId || null;
+
+    if (!state.aiSending) {
+      if (targetId && data.activeConversation && data.activeConversation.id === targetId) {
+        state.aiActiveConversationId = targetId;
+        state.aiMessages = Array.isArray(data.activeConversation.messages) ? data.activeConversation.messages : [];
+        state.aiLastAnimatedIdx = state.aiMessages.length - 1;
+      } else if (targetId) {
+        const detail = await api(`/api/ai/conversations/${encodeURIComponent(targetId)}`);
+        state.aiActiveConversationId = targetId;
+        state.aiMessages = Array.isArray(detail.conversation?.messages) ? detail.conversation.messages : [];
+        state.aiLastAnimatedIdx = state.aiMessages.length - 1;
+      } else {
+        state.aiActiveConversationId = null;
+        state.aiMessages = [];
+        state.aiLastAnimatedIdx = -1;
+      }
+      renderAiMessages();
+    }
+    renderAiConversationsList();
+  } catch (err) {
+    if (!silent) toast(`Erro ao sincronizar conversas: ${err.message}`, 'warn');
+  }
+}
+
+async function selectAiConversation(convId) {
+  if (!convId || state.aiSending) return;
+  try {
+    const detail = await api(`/api/ai/conversations/${encodeURIComponent(convId)}?select=1`);
+    state.aiActiveConversationId = detail.conversation.id;
+    state.aiMessages = Array.isArray(detail.conversation.messages) ? detail.conversation.messages : [];
+    state.aiLastAnimatedIdx = state.aiMessages.length - 1;
+    renderAiConversationsList();
+    renderAiMessages();
+  } catch (err) {
+    toast(`Erro ao abrir conversa: ${err.message}`, 'error');
+  }
+}
+
+async function startNewAiConversation() {
+  if (state.aiSending) return;
+  try {
+    const created = await api('/api/ai/conversations', { method: 'POST', body: {} });
+    state.aiConversations = created.conversations || [];
+    state.aiActiveConversationId = created.conversation?.id || null;
+    state.aiMessages = [];
+    state.aiLastAnimatedIdx = -1;
+    renderAiConversationsList();
+    renderAiMessages();
+    $('#ai-chat-input')?.focus();
+  } catch (err) {
+    toast(`Erro ao criar conversa: ${err.message}`, 'error');
+  }
+}
+
+async function deleteAiConversation(convId) {
+  if (!convId || state.aiSending) return;
+  try {
+    const res = await api(`/api/ai/conversations/${encodeURIComponent(convId)}`, { method: 'DELETE' });
+    state.aiConversations = res.conversations || [];
+    state.aiActiveConversationId = res.activeConversationId || null;
+    state.aiMessages = Array.isArray(res.activeConversation?.messages) ? res.activeConversation.messages : [];
+    state.aiLastAnimatedIdx = state.aiMessages.length - 1;
+    renderAiConversationsList();
+    renderAiMessages();
+    toast('Conversa excluída.');
+  } catch (err) {
+    toast(`Erro ao excluir conversa: ${err.message}`, 'error');
+  }
+}
+
+function connectAiSync() {
+  if (state.aiSyncSse || !state.currentUser) return;
+  const syncPill = $('#ai-sync-pill');
+  try {
+    const es = new EventSource('/api/ai/events');
+    state.aiSyncSse = es;
+
+    es.addEventListener('connected', () => {
+      if (syncPill) syncPill.classList.remove('hidden');
+    });
+
+    es.addEventListener('sync', () => {
+      if (!state.aiSending) {
+        loadAiConversations(true);
+      }
+    });
+
+    es.onerror = () => {
+      if (syncPill) syncPill.classList.add('hidden');
+      disconnectAiSync();
+      if (state.currentUser) {
+        state.aiSyncReconnectTimer = setTimeout(() => {
+          state.aiSyncReconnectTimer = null;
+          if (state.currentUser) connectAiSync();
+        }, 4000);
+      }
+    };
+  } catch {
+    // fallback silencioso
+  }
+}
+
+function disconnectAiSync() {
+  if (state.aiSyncReconnectTimer) {
+    clearTimeout(state.aiSyncReconnectTimer);
+    state.aiSyncReconnectTimer = null;
+  }
+  if (state.aiSyncSse) {
+    state.aiSyncSse.close();
+    state.aiSyncSse = null;
+  }
+  $('#ai-sync-pill')?.classList.add('hidden');
 }
 
 function renderAiStatus(status) {
@@ -2470,8 +2677,9 @@ function renderAiMessages() {
               : '';
           const cmdDisplay = p.command ? `/${p.command}` : p.label;
           let footer = '';
+          const resolvedOut = p.resolvedOutput || p.output;
           if (p.resolution === 'executed') {
-            footer = `<small class="muted-text">✓ Executado${p.output ? `: ${escapeHtml(p.output)}` : ''}</small>`;
+            footer = `<small class="muted-text">✓ Executado${resolvedOut ? `: ${escapeHtml(resolvedOut)}` : ''}</small>`;
           } else if (p.resolution === 'rejected') {
             footer = `<small class="muted-text">✕ Ação cancelada pelo usuário.</small>`;
           } else {
@@ -2590,16 +2798,25 @@ async function sendAiMessage(text) {
   try {
     const res = await api('/api/ai/chat', {
       method: 'POST',
-      body: { message: clean, history },
+      body: {
+        message: clean,
+        history,
+        conversationId: state.aiActiveConversationId || undefined,
+      },
     });
+    if (res.conversationId) {
+      state.aiActiveConversationId = res.conversationId;
+    }
     state.aiMessages.push({
+      id: res.assistantMessage?.id,
       role: 'model',
       text: res.reply,
       model: res.model,
       actions: res.actions || [],
       pendingActions: res.pendingActions || [],
-      time: nowTimeStr(),
+      time: res.assistantMessage?.time || nowTimeStr(),
     });
+    loadAiConversations(true);
   } catch (err) {
     state.aiMessages.push({
       role: 'model',
@@ -2626,6 +2843,7 @@ async function handleAiPendingDecision(actionId, decision) {
       const found = msg.pendingActions.find((p) => p.id === actionId);
       if (found) {
         found.resolution = res.status;
+        found.resolvedOutput = res.output || res.summary;
         found.output = res.output || res.summary;
       }
     }

@@ -1,0 +1,39 @@
+name: YacaCode CI (Panel & Android)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  panel-tests:
+    name: Web Panel (Node 22)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check syntax & run panel unit tests
+        working-directory: panel
+        run: |
+          node --check server.js
+          node --check lib/ai-history.js
+          node --check public/app.js
+          node --test tests/*.test.js
+
+  android-tests:
+    name: Android App (Kotlin / Compose)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Run Android unit tests
+        working-directory: apps/android
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest --no-daemon

@@ -366,51 +366,66 @@
              TAB 1B: ASSISTENTE IA (GEMINI)
              =================================================================== -->
         <section id="tab-ai" class="tab-panel" aria-label="Chat Assistente IA Gemini">
-          <article class="card ai-card">
-            <div class="ai-toolbar">
-              <div class="ai-toolbar-left">
-                <span id="ai-status-dot" class="dot dot-warn" aria-hidden="true"></span>
+          <div class="ai-workspace">
+            <aside id="ai-history-pane" class="card ai-history-pane" aria-label="Histórico de conversas do usuário">
+              <div class="ai-history-head">
                 <div>
-                  <div class="ai-title-row">
-                    <strong>YacaCode AI</strong>
-                    <span id="ai-model-pill" class="pill pill-accent">gemini-3.5-flash-lite</span>
-                    <span id="ai-perm-pill" class="pill pill-muted">Verificando...</span>
-                    <span id="ai-ingame-pill" class="pill pill-info hidden">Chat no jogo: Jorge</span>
+                  <strong>Conversas</strong>
+                  <small id="ai-history-user" class="muted-text">Salvas na sua conta</small>
+                </div>
+                <button id="btn-ai-new-chat" type="button" class="btn btn-primary btn-sm">+ Nova</button>
+              </div>
+              <div id="ai-history-list" class="ai-history-list" role="list"></div>
+            </aside>
+
+            <article class="card ai-card">
+              <div class="ai-toolbar">
+                <div class="ai-toolbar-left">
+                  <button id="btn-ai-history-toggle" type="button" class="btn btn-ghost btn-sm ai-history-toggle" aria-label="Alternar histórico de conversas">☰ Conversas</button>
+                  <span id="ai-status-dot" class="dot dot-warn" aria-hidden="true"></span>
+                  <div>
+                    <div class="ai-title-row">
+                      <strong>YacaCode AI</strong>
+                      <span id="ai-model-pill" class="pill pill-accent">gemini-3.5-flash-lite</span>
+                      <span id="ai-perm-pill" class="pill pill-muted">Verificando...</span>
+                      <span id="ai-ingame-pill" class="pill pill-info hidden">Chat no jogo: Jorge</span>
+                      <span id="ai-sync-pill" class="pill pill-ok hidden">Sincronizado</span>
+                    </div>
+                    <small id="ai-status-sub" class="muted-text">Conectado ao servidor Minecraft via Function Calling</small>
                   </div>
-                  <small id="ai-status-sub" class="muted-text">Conectado ao servidor Minecraft via Function Calling</small>
+                </div>
+                <div class="ai-toolbar-actions">
+                  <button id="btn-ai-config" type="button" class="btn btn-secondary btn-sm hidden">⚙ Configurar IA</button>
+                  <button id="btn-ai-clear" type="button" class="btn btn-ghost btn-sm">+ Nova conversa</button>
                 </div>
               </div>
-              <div class="ai-toolbar-actions">
-                <button id="btn-ai-config" type="button" class="btn btn-secondary btn-sm hidden">⚙ Configurar IA</button>
-                <button id="btn-ai-clear" type="button" class="btn btn-ghost btn-sm">Limpar chat</button>
+
+              <div id="ai-setup-banner" class="ai-setup-banner hidden">
+                <div>
+                  <strong>API Key do Gemini ainda não configurada</strong>
+                  <p id="ai-setup-desc" class="muted-text">
+                    Cadastre sua chave gratuita do Google AI Studio para ativar o assistente IA no painel.
+                  </p>
+                </div>
+                <button id="btn-ai-setup-now" type="button" class="btn btn-primary btn-sm hidden">Configurar Chave API</button>
               </div>
-            </div>
 
-            <div id="ai-setup-banner" class="ai-setup-banner hidden">
-              <div>
-                <strong>API Key do Gemini ainda não configurada</strong>
-                <p id="ai-setup-desc" class="muted-text">
-                  Cadastre sua chave gratuita do Google AI Studio para ativar o assistente IA no painel.
-                </p>
+              <div id="ai-messages" class="ai-messages" role="log" aria-live="polite" aria-label="Conversa com o Assistente IA"></div>
+
+              <div class="ai-suggestions" aria-label="Sugestões rápidas">
+                <button type="button" class="chip-btn" data-ai-prompt="Quem está online agora e em qual nível de XP?">Quem tá online e nível?</button>
+                <button type="button" class="chip-btn" data-ai-prompt="Deixe de dia e limpe o clima agora.">Deixar de dia e limpar clima</button>
+                <button type="button" class="chip-btn" data-ai-prompt="Como está a saúde do servidor agora (CPU, RAM, temperatura e uptime)?">Saúde do servidor</button>
+                <button type="button" class="chip-btn" data-ai-prompt="Resuma o que aconteceu nos últimos logs do servidor.">Resumo dos logs</button>
               </div>
-              <button id="btn-ai-setup-now" type="button" class="btn btn-primary btn-sm hidden">Configurar Chave API</button>
-            </div>
 
-            <div id="ai-messages" class="ai-messages" role="log" aria-live="polite" aria-label="Conversa com o Assistente IA"></div>
-
-            <div class="ai-suggestions" aria-label="Sugestões rápidas">
-              <button type="button" class="chip-btn" data-ai-prompt="Quem está online agora e em qual nível de XP?">Quem tá online e nível?</button>
-              <button type="button" class="chip-btn" data-ai-prompt="Deixe de dia e limpe o clima agora.">Deixar de dia e limpar clima</button>
-              <button type="button" class="chip-btn" data-ai-prompt="Como está a saúde do servidor agora (CPU, RAM, temperatura e uptime)?">Saúde do servidor</button>
-              <button type="button" class="chip-btn" data-ai-prompt="Resuma o que aconteceu nos últimos logs do servidor.">Resumo dos logs</button>
-            </div>
-
-            <form id="ai-chat-form" class="ai-input-row">
-              <label for="ai-chat-input" class="sr-only">Mensagem para o Assistente IA Gemini</label>
-              <textarea id="ai-chat-input" rows="1" placeholder="Pergunte algo ou peça uma ação (ex: quem tá online? deixe de dia, dê OP para Nycolazs)..." autocomplete="off"></textarea>
-              <button id="btn-ai-send" type="submit" class="btn btn-primary">Enviar</button>
-            </form>
-          </article>
+              <form id="ai-chat-form" class="ai-input-row">
+                <label for="ai-chat-input" class="sr-only">Mensagem para o Assistente IA Gemini</label>
+                <textarea id="ai-chat-input" rows="1" placeholder="Pergunte algo ou peça uma ação (ex: quem tá online? deixe de dia, dê OP para Nycolazs)..." autocomplete="off"></textarea>
+                <button id="btn-ai-send" type="submit" class="btn btn-primary">Enviar</button>
+              </form>
+            </article>
+          </div>
         </section>
 
         <!-- ===================================================================

@@ -1,0 +1,596 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		01D0733BFAA5DF5D50E9C8D9 /* BackupsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A437368B98F41EA0A6BAC9F /* BackupsView.swift */; };
+		39EF19982B99D8A2C381A93D /* TelemetryChartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D3E51C0F2E07C74A751F80B /* TelemetryChartView.swift */; };
+		3F7E92AB882712181063843F /* PlayersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 360CF757907C71C17A8981B2 /* PlayersView.swift */; };
+		421B8033D3E94EDCB9BD2E3A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5E01DA2B9C09A9B744C5B70E /* Assets.xcassets */; };
+		46C80EE43C1CA12EF0521313 /* MarkdownMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0274514BC57F04A747E0D41 /* MarkdownMessageView.swift */; };
+		47DC8C0898984EC3FC6DFB85 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F0EC5A450274BB7A10B9EB3 /* Models.swift */; };
+		51B3D833583E4E007B35E61A /* BiometricAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EAC9A13B32889C7A5520C2D /* BiometricAuth.swift */; };
+		5BD7BE3ECE246A14B20393CD /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E6C46CA066273BCD7F32A17 /* LoginView.swift */; };
+		661CFCE1FEA0768C7F18A6F9 /* YacaCodeMCTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 368C1CD72055E996838A3B39 /* YacaCodeMCTests.swift */; };
+		690E1F239B49D27484B9F928 /* AppSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6755539AEB4862005E3B42F /* AppSettingsView.swift */; };
+		709D6C9FA00A2F017234DDFB /* ServerSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C2E36DE458FDD60165BC48C /* ServerSettingsView.swift */; };
+		74A43527CC86F25AA778D321 /* TerminalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0419A301A17548A293BD5AA6 /* TerminalView.swift */; };
+		79FD3E9F4FBA32120CB08AD0 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 650195CA495C2B9F590F3A5C /* Theme.swift */; };
+		7C322E2F23D57290FC473F37 /* FileManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15FE3A63618B6CAA84DDB9D /* FileManagerView.swift */; };
+		80798316E148BE6FA93DD99A /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E176720CAAC34F5403785D7 /* AppState.swift */; };
+		90A6AFE2022FF8E2B33B7A7F /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 947ECBF8228056B6A7DD8A8E /* KeychainStore.swift */; };
+		9D1E1E9379E8D53AA65B834D /* YacaCodeMCApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C90B56026BF1EFEDC66EED20 /* YacaCodeMCApp.swift */; };
+		BC81D3C75F46DAEE48DEA2A5 /* PluginsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7F5A5573F4999850FFC4BED /* PluginsView.swift */; };
+		C53BDDA7AEBB5968BEF96C0F /* OverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ADBA5F6406E7F19948EDD1D /* OverviewView.swift */; };
+		CD115F5FD4F2CB218556E9DA /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E097175A9D0F850C5BD16AB /* APIClient.swift */; };
+		CFFF0D099A1FD434799D92ED /* NetworkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51622AF23EA3B06ED4D4BD33 /* NetworkView.swift */; };
+		DFADB596736823C09CD64883 /* UsersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6858F7371AC56CB34FFD043D /* UsersView.swift */; };
+		EBBA6C7819CD03AE721F0C16 /* ManageHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56B54DDA2C7F06EA11CA8589 /* ManageHubView.swift */; };
+		F8079EC6FA86D7AF06962C25 /* AIChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBF2210DFF108B1926205E22 /* AIChatView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		8347AB8C682154D67EE0D215 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5D2781376DCB3A39DAE836BD /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 81536F21C73A2491ECD939A2;
+			remoteInfo = YacaCodeMC;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0419A301A17548A293BD5AA6 /* TerminalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalView.swift; sourceTree = "<group>"; };
+		0C2E36DE458FDD60165BC48C /* ServerSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerSettingsView.swift; sourceTree = "<group>"; };
+		0EAC9A13B32889C7A5520C2D /* BiometricAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiometricAuth.swift; sourceTree = "<group>"; };
+		17BBF538BC088C42DBC88454 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		1D3E51C0F2E07C74A751F80B /* TelemetryChartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TelemetryChartView.swift; sourceTree = "<group>"; };
+		1F0EC5A450274BB7A10B9EB3 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		2A437368B98F41EA0A6BAC9F /* BackupsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupsView.swift; sourceTree = "<group>"; };
+		360CF757907C71C17A8981B2 /* PlayersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayersView.swift; sourceTree = "<group>"; };
+		368C1CD72055E996838A3B39 /* YacaCodeMCTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YacaCodeMCTests.swift; sourceTree = "<group>"; };
+		50171C7345B983F67D899F3D /* YacaCodeMC.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = YacaCodeMC.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		51622AF23EA3B06ED4D4BD33 /* NetworkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkView.swift; sourceTree = "<group>"; };
+		56B54DDA2C7F06EA11CA8589 /* ManageHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageHubView.swift; sourceTree = "<group>"; };
+		5ADBA5F6406E7F19948EDD1D /* OverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewView.swift; sourceTree = "<group>"; };
+		5E01DA2B9C09A9B744C5B70E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		5E176720CAAC34F5403785D7 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		650195CA495C2B9F590F3A5C /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		6858F7371AC56CB34FFD043D /* UsersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsersView.swift; sourceTree = "<group>"; };
+		947ECBF8228056B6A7DD8A8E /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		9E097175A9D0F850C5BD16AB /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		9E6C46CA066273BCD7F32A17 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		B6755539AEB4862005E3B42F /* AppSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsView.swift; sourceTree = "<group>"; };
+		C90B56026BF1EFEDC66EED20 /* YacaCodeMCApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YacaCodeMCApp.swift; sourceTree = "<group>"; };
+		D7F5A5573F4999850FFC4BED /* PluginsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PluginsView.swift; sourceTree = "<group>"; };
+		E15FE3A63618B6CAA84DDB9D /* FileManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileManagerView.swift; sourceTree = "<group>"; };
+		F0274514BC57F04A747E0D41 /* MarkdownMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownMessageView.swift; sourceTree = "<group>"; };
+		FBF2210DFF108B1926205E22 /* AIChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIChatView.swift; sourceTree = "<group>"; };
+		FE9847FBDD754489CDF183B0 /* YacaCodeMCTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = YacaCodeMCTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		1F70176E0CA02D0B732268C8 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				9E097175A9D0F850C5BD16AB /* APIClient.swift */,
+				5E176720CAAC34F5403785D7 /* AppState.swift */,
+				0EAC9A13B32889C7A5520C2D /* BiometricAuth.swift */,
+				947ECBF8228056B6A7DD8A8E /* KeychainStore.swift */,
+				1F0EC5A450274BB7A10B9EB3 /* Models.swift */,
+				650195CA495C2B9F590F3A5C /* Theme.swift */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		59A3E521662980101EFF2AC4 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				5E01DA2B9C09A9B744C5B70E /* Assets.xcassets */,
+				17BBF538BC088C42DBC88454 /* Info.plist */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		625DC55F6DC04349E00D7142 /* Console */ = {
+			isa = PBXGroup;
+			children = (
+				0419A301A17548A293BD5AA6 /* TerminalView.swift */,
+			);
+			path = Console;
+			sourceTree = "<group>";
+		};
+		689AB1A5E9453AAE3F854264 /* Login */ = {
+			isa = PBXGroup;
+			children = (
+				9E6C46CA066273BCD7F32A17 /* LoginView.swift */,
+			);
+			path = Login;
+			sourceTree = "<group>";
+		};
+		7D54E5A2C1E4F6BD9366454C /* YacaCodeMCTests */ = {
+			isa = PBXGroup;
+			children = (
+				368C1CD72055E996838A3B39 /* YacaCodeMCTests.swift */,
+			);
+			path = YacaCodeMCTests;
+			sourceTree = "<group>";
+		};
+		83D1B0E26A86E127C88484AB /* Overview */ = {
+			isa = PBXGroup;
+			children = (
+				5ADBA5F6406E7F19948EDD1D /* OverviewView.swift */,
+				1D3E51C0F2E07C74A751F80B /* TelemetryChartView.swift */,
+			);
+			path = Overview;
+			sourceTree = "<group>";
+		};
+		9438E867D17BAAF41B8C3681 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				D3C73335584E65DC0F4B5A0B /* AI */,
+				625DC55F6DC04349E00D7142 /* Console */,
+				689AB1A5E9453AAE3F854264 /* Login */,
+				E2F6E2EB6DB3A499AD52FD9F /* Manage */,
+				83D1B0E26A86E127C88484AB /* Overview */,
+				D74BFCF2994B71DBB3D1C740 /* Players */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		ABD5A937467F3104334090D8 /* YacaCodeMC */ = {
+			isa = PBXGroup;
+			children = (
+				C90B56026BF1EFEDC66EED20 /* YacaCodeMCApp.swift */,
+				1F70176E0CA02D0B732268C8 /* Core */,
+				9438E867D17BAAF41B8C3681 /* Features */,
+				59A3E521662980101EFF2AC4 /* Resources */,
+			);
+			path = YacaCodeMC;
+			sourceTree = "<group>";
+		};
+		D3C73335584E65DC0F4B5A0B /* AI */ = {
+			isa = PBXGroup;
+			children = (
+				FBF2210DFF108B1926205E22 /* AIChatView.swift */,
+				F0274514BC57F04A747E0D41 /* MarkdownMessageView.swift */,
+			);
+			path = AI;
+			sourceTree = "<group>";
+		};
+		D74BFCF2994B71DBB3D1C740 /* Players */ = {
+			isa = PBXGroup;
+			children = (
+				360CF757907C71C17A8981B2 /* PlayersView.swift */,
+			);
+			path = Players;
+			sourceTree = "<group>";
+		};
+		E2F6E2EB6DB3A499AD52FD9F /* Manage */ = {
+			isa = PBXGroup;
+			children = (
+				B6755539AEB4862005E3B42F /* AppSettingsView.swift */,
+				2A437368B98F41EA0A6BAC9F /* BackupsView.swift */,
+				E15FE3A63618B6CAA84DDB9D /* FileManagerView.swift */,
+				56B54DDA2C7F06EA11CA8589 /* ManageHubView.swift */,
+				51622AF23EA3B06ED4D4BD33 /* NetworkView.swift */,
+				D7F5A5573F4999850FFC4BED /* PluginsView.swift */,
+				0C2E36DE458FDD60165BC48C /* ServerSettingsView.swift */,
+				6858F7371AC56CB34FFD043D /* UsersView.swift */,
+			);
+			path = Manage;
+			sourceTree = "<group>";
+		};
+		E824244905DD2A7BC7122672 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				50171C7345B983F67D899F3D /* YacaCodeMC.app */,
+				FE9847FBDD754489CDF183B0 /* YacaCodeMCTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		E8709E0831290CF0E6D092F3 = {
+			isa = PBXGroup;
+			children = (
+				ABD5A937467F3104334090D8 /* YacaCodeMC */,
+				7D54E5A2C1E4F6BD9366454C /* YacaCodeMCTests */,
+				E824244905DD2A7BC7122672 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		81536F21C73A2491ECD939A2 /* YacaCodeMC */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F7A172C8F727E648DD79C305 /* Build configuration list for PBXNativeTarget "YacaCodeMC" */;
+			buildPhases = (
+				119B0C191B53E9424B0B8782 /* Sources */,
+				21D023D4E75D042CC9512044 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = YacaCodeMC;
+			packageProductDependencies = (
+			);
+			productName = YacaCodeMC;
+			productReference = 50171C7345B983F67D899F3D /* YacaCodeMC.app */;
+			productType = "com.apple.product-type.application";
+		};
+		D34E41DA81D9F05145B6AD44 /* YacaCodeMCTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F47AED98AD626A7498BB99EA /* Build configuration list for PBXNativeTarget "YacaCodeMCTests" */;
+			buildPhases = (
+				D1AF49004A62A19A56024D16 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3BEC274474A064CED39BC1B0 /* PBXTargetDependency */,
+			);
+			name = YacaCodeMCTests;
+			packageProductDependencies = (
+			);
+			productName = YacaCodeMCTests;
+			productReference = FE9847FBDD754489CDF183B0 /* YacaCodeMCTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		5D2781376DCB3A39DAE836BD /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					81536F21C73A2491ECD939A2 = {
+						DevelopmentTeam = F57SJFTGUK;
+						ProvisioningStyle = Automatic;
+					};
+					D34E41DA81D9F05145B6AD44 = {
+						DevelopmentTeam = F57SJFTGUK;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 1607D6B68E00B647E4BE72AA /* Build configuration list for PBXProject "YacaCodeMC" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = E8709E0831290CF0E6D092F3;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = E824244905DD2A7BC7122672 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				81536F21C73A2491ECD939A2 /* YacaCodeMC */,
+				D34E41DA81D9F05145B6AD44 /* YacaCodeMCTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		21D023D4E75D042CC9512044 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				421B8033D3E94EDCB9BD2E3A /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		119B0C191B53E9424B0B8782 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F8079EC6FA86D7AF06962C25 /* AIChatView.swift in Sources */,
+				CD115F5FD4F2CB218556E9DA /* APIClient.swift in Sources */,
+				690E1F239B49D27484B9F928 /* AppSettingsView.swift in Sources */,
+				80798316E148BE6FA93DD99A /* AppState.swift in Sources */,
+				01D0733BFAA5DF5D50E9C8D9 /* BackupsView.swift in Sources */,
+				51B3D833583E4E007B35E61A /* BiometricAuth.swift in Sources */,
+				7C322E2F23D57290FC473F37 /* FileManagerView.swift in Sources */,
+				90A6AFE2022FF8E2B33B7A7F /* KeychainStore.swift in Sources */,
+				5BD7BE3ECE246A14B20393CD /* LoginView.swift in Sources */,
+				EBBA6C7819CD03AE721F0C16 /* ManageHubView.swift in Sources */,
+				46C80EE43C1CA12EF0521313 /* MarkdownMessageView.swift in Sources */,
+				47DC8C0898984EC3FC6DFB85 /* Models.swift in Sources */,
+				CFFF0D099A1FD434799D92ED /* NetworkView.swift in Sources */,
+				C53BDDA7AEBB5968BEF96C0F /* OverviewView.swift in Sources */,
+				3F7E92AB882712181063843F /* PlayersView.swift in Sources */,
+				BC81D3C75F46DAEE48DEA2A5 /* PluginsView.swift in Sources */,
+				709D6C9FA00A2F017234DDFB /* ServerSettingsView.swift in Sources */,
+				39EF19982B99D8A2C381A93D /* TelemetryChartView.swift in Sources */,
+				74A43527CC86F25AA778D321 /* TerminalView.swift in Sources */,
+				79FD3E9F4FBA32120CB08AD0 /* Theme.swift in Sources */,
+				DFADB596736823C09CD64883 /* UsersView.swift in Sources */,
+				9D1E1E9379E8D53AA65B834D /* YacaCodeMCApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D1AF49004A62A19A56024D16 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				661CFCE1FEA0768C7F18A6F9 /* YacaCodeMCTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		3BEC274474A064CED39BC1B0 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 81536F21C73A2491ECD939A2 /* YacaCodeMC */;
+			targetProxy = 8347AB8C682154D67EE0D215 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		13658B582C8176EBA07FE220 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.yacacode.minecraft.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/YacaCodeMC.app/YacaCodeMC";
+			};
+			name = Release;
+		};
+		43CE257EDD0E92E6607603AC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = YacaCodeMC/Resources/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "YacaCode MC";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.yacacode.minecraft;
+				PRODUCT_NAME = YacaCodeMC;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		46546B484343BE4C06269E58 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.yacacode.minecraft.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/YacaCodeMC.app/YacaCodeMC";
+			};
+			name = Debug;
+		};
+		899127957536496ED82AC4FC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = F57SJFTGUK;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		F185B9F836C2F495D809F577 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = YacaCodeMC/Resources/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "YacaCode MC";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.yacacode.minecraft;
+				PRODUCT_NAME = YacaCodeMC;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		FF5EADA66439228E9A422CB1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = F57SJFTGUK;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1607D6B68E00B647E4BE72AA /* Build configuration list for PBXProject "YacaCodeMC" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				899127957536496ED82AC4FC /* Debug */,
+				FF5EADA66439228E9A422CB1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		F47AED98AD626A7498BB99EA /* Build configuration list for PBXNativeTarget "YacaCodeMCTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				46546B484343BE4C06269E58 /* Debug */,
+				13658B582C8176EBA07FE220 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		F7A172C8F727E648DD79C305 /* Build configuration list for PBXNativeTarget "YacaCodeMC" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F185B9F836C2F495D809F577 /* Debug */,
+				43CE257EDD0E92E6607603AC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 5D2781376DCB3A39DAE836BD /* Project object */;
+}

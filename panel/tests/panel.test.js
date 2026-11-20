@@ -12,6 +12,7 @@ import { createAuthManager, hashPassword, verifyPasswordHash } from '../lib/auth
 import { createRconClient, stripMinecraftColors } from '../lib/rcon.js';
 import { parseNbtBuffer, createPlayerDataReader } from '../lib/playerdata.js';
 import { classifyMinecraftCommand, createAiAssistant } from '../lib/ai.js';
+import { createAiHistoryStore } from '../lib/ai-history.js';
 import { createGoogleDriveBackupManager } from '../lib/gdrive.js';
 import {
   parseMinecraftChatLine,
@@ -742,6 +743,74 @@ test('In-Game AI Chat (Jorge): parser Pumpkin/Vanilla, só responde quando chama
     assert.equal(capturedBody.tools, undefined);
     assert.match(capturedBody.systemInstruction.parts[0].text, /-1596/);
     assert.match(capturedBody.systemInstruction.parts[0].text, /YacaWorld/);
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('AI History: persistência por usuário, isolamento, pendingAction sync e pub/sub', () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'yc-ai-history-'));
+  const historyFile = path.join(tmpRoot, '.yacacode-ai-chats.json');
+  try {
+    const store = createAiHistoryStore({ historyFile, maxConversationsPerUser: 5, maxMessagesPerConversation: 20 });
+
+    const nycEvents = [];
+    const modEvents = [];
+    const unsubNyc = store.subscribe('nycolas', (ev) => nycEvents.push(ev));
+    const unsubMod = store.subscribe('moderador', (ev) => modEvents.push(ev));
+
+    // Auto-cria conversa com título derivado da 1ª mensagem
+    const u1 = store.appendUserMessage('nycolas', { text: 'Quem está online agora e qual o nível de XP?' });
+    assert.ok(u1.conversation.id);
+    assert.match(u1.conversation.title, /Quem está online/);
+    assert.equal(nycEvents.length, 1);
+    assert.equal(modEvents.length, 0); // Isolamento estrito entre usuários!
+
+    // Salva resposta com ação pendente
+    const m1 = store.appendModelMessage('nycolas', {
+      conversationId: u1.conversation.id,
+      text: 'Quer expulsar o jogador Grief?',
+      model: 'gemini-3.5-flash-lite',
+      actions: [{ label: 'list_players', status: 'ok', output: '1 online' }],
+      pendingActions: [{ id: 'act_123', label: 'Expulsar Grief', command: 'kick Grief', reason: 'Destrutiva' }],
+    });
+    assert.equal(m1.conversation.messages.length, 2);
+    assert.equal(nycEvents.length, 2);
+
+    // Outro usuário não enxerga conversas de nycolas
+    const modList = store.listConversations('moderador');
+    assert.equal(modList.conversations.length, 0);
+    assert.equal(store.getConversation('moderador', u1.conversation.id), null);
+
+    // Resolver ação pendente atualiza histórico e dispara evento de sync
+    const resolvedConv = store.resolvePendingActionInHistory('nycolas', {
+      actionId: 'act_123',
+      status: 'executed',
+      output: 'Kicked Grief',
+    });
+    assert.ok(resolvedConv);
+    assert.equal(resolvedConv.messages[1].pendingActions[0].resolution, 'executed');
+    assert.equal(resolvedConv.messages[1].pendingActions[0].resolvedOutput, 'Kicked Grief');
+    assert.equal(nycEvents.length, 3);
+    assert.equal(nycEvents[2].type, 'pending_resolved');
+
+    // Recarrega do disco (simula reinício do container)
+    const reloaded = createAiHistoryStore({ historyFile });
+    const listAfterRestart = reloaded.listConversations('nycolas');
+    assert.equal(listAfterRestart.conversations.length, 1);
+    assert.equal(listAfterRestart.activeConversation.messages.length, 2);
+    assert.equal(listAfterRestart.activeConversation.messages[1].pendingActions[0].resolution, 'executed');
+
+    // Criar nova conversa, renomear e excluir
+    const c2 = reloaded.createConversation('nycolas', { title: 'Manutenção' });
+    assert.equal(c2.conversations.length, 2);
+    const renamed = reloaded.renameConversation('nycolas', c2.conversation.id, 'Backup Semanal');
+    assert.equal(renamed.title, 'Backup Semanal');
+    const del = reloaded.deleteConversation('nycolas', c2.conversation.id);
+    assert.equal(del.conversations.length, 1);
+
+    unsubNyc();
+    unsubMod();
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }

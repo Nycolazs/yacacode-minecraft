@@ -12,6 +12,7 @@ import { createSystemMonitor } from './lib/system.js';
 import { createFileManager } from './lib/files.js';
 import { createPlayerDataReader } from './lib/playerdata.js';
 import { createAiAssistant } from './lib/ai.js';
+import { createAiHistoryStore } from './lib/ai-history.js';
 import { createGoogleDriveBackupManager } from './lib/gdrive.js';
 import { createInGameChatBridge } from './lib/ingame-chat.js';
 
@@ -300,6 +301,10 @@ async function queryLiveXpLevel(playerName) {
   }
   return null;
 }
+
+const aiHistory = createAiHistoryStore({
+  historyFile: path.join(CONFIG.dataDir, '.yacacode-ai-chats.json'),
+});
 
 const ai = createAiAssistant({
   configFile: path.join(CONFIG.dataDir, '.yacacode-ai-config.json'),
@@ -1239,7 +1244,7 @@ async function handleApi(req, res, url) {
   }
 
   // ---------------------------------------------------------------------------
-  // 10. ASSISTENTE IA GEMINI (CHAT + FUNCTION CALLING + CONFIRMAÇÃO 1-CLIQUE)
+  // 10. ASSISTENTE IA GEMINI (CHAT + HISTÓRICO POR USUÁRIO + SYNC REAL-TIME)
   // ---------------------------------------------------------------------------
   if (pathname === '/api/ai/status' && method === 'GET') {
     return sendJson(res, 200, {
@@ -1264,14 +1269,120 @@ async function handleApi(req, res, url) {
     });
   }
 
+  if (pathname === '/api/ai/conversations' && method === 'GET') {
+    return sendJson(res, 200, aiHistory.listConversations(session.username));
+  }
+
+  if (pathname === '/api/ai/conversations' && method === 'POST') {
+    const body = await readJsonBody(req, 8 * 1024);
+    const created = aiHistory.createConversation(session.username, {
+      title: body?.title || '',
+      select: true,
+    });
+    return sendJson(res, 201, created);
+  }
+
+  const aiConvMatch = pathname.match(/^\/api\/ai\/conversations\/([a-zA-Z0-9_-]{3,80})$/);
+  if (aiConvMatch) {
+    const convId = aiConvMatch[1];
+    if (method === 'GET') {
+      const select = url.searchParams.get('select') === '1';
+      const conv = aiHistory.getConversation(session.username, convId, { select });
+      if (!conv) return sendJson(res, 404, { error: 'Conversa não encontrada.' });
+      return sendJson(res, 200, { conversation: conv });
+    }
+    if (method === 'PATCH') {
+      const body = await readJsonBody(req, 8 * 1024);
+      const updated = aiHistory.renameConversation(session.username, convId, body?.title || '');
+      if (!updated) return sendJson(res, 404, { error: 'Conversa não encontrada.' });
+      return sendJson(res, 200, { conversation: updated });
+    }
+    if (method === 'DELETE') {
+      const deleted = aiHistory.deleteConversation(session.username, convId);
+      if (!deleted) return sendJson(res, 404, { error: 'Conversa não encontrada.' });
+      return sendJson(res, 200, deleted);
+    }
+  }
+
+  if (pathname === '/api/ai/events' && method === 'GET') {
+    setSecurityHeaders(res);
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+
+    const writeEvent = (event, data) => {
+      if (res.writableEnded) return;
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    writeEvent('connected', { user: session.username, ts: Date.now() });
+
+    const keepalive = setInterval(() => {
+      if (!res.writableEnded) res.write(': keepalive\n\n');
+    }, 20000);
+
+    const unsubscribe = aiHistory.subscribe(session.username, (payload) => {
+      writeEvent('sync', payload);
+    });
+
+    req.on('close', () => {
+      clearInterval(keepalive);
+      unsubscribe();
+    });
+    return;
+  }
+
   if (pathname === '/api/ai/chat' && method === 'POST') {
     const body = await readJsonBody(req, 128 * 1024);
+    const cleanMsg = String(body?.message || '').trim();
+    if (!cleanMsg) {
+      return sendJson(res, 400, { error: 'Digite uma mensagem para o assistente.' });
+    }
+    if (!ai.getPublicStatus(session.role).configured) {
+      return sendJson(res, 400, { error: 'API Key do Gemini ainda não configurada.' });
+    }
+
+    const reqConvId = typeof body?.conversationId === 'string' && body.conversationId.trim()
+      ? body.conversationId.trim()
+      : null;
+
+    // Usa o histórico salvo no servidor (garante contexto unificado entre celular e PC)
+    const serverHistory = reqConvId
+      ? aiHistory.getHistoryForPrompt(session.username, reqConvId, 16)
+      : [];
+    const promptHistory = serverHistory.length > 0 ? serverHistory : body.history;
+
+    const userSaved = aiHistory.appendUserMessage(session.username, {
+      conversationId: reqConvId,
+      text: cleanMsg,
+    });
+    const convId = userSaved.conversation.id;
+
     const result = await ai.chat({
-      message: body.message,
-      history: body.history,
+      message: cleanMsg,
+      history: promptHistory,
       session,
     });
-    return sendJson(res, 200, result);
+
+    const modelSaved = aiHistory.appendModelMessage(session.username, {
+      conversationId: convId,
+      text: result.reply,
+      model: result.model,
+      actions: result.actions || [],
+      pendingActions: result.pendingActions || [],
+    });
+
+    return sendJson(res, 200, {
+      ...result,
+      conversationId: convId,
+      conversationTitle: modelSaved?.conversation?.title || userSaved.conversation.title,
+      userMessage: userSaved.message,
+      assistantMessage: modelSaved?.message || null,
+      updatedAt: modelSaved?.conversation?.updatedAt || userSaved.conversation.updatedAt,
+    });
   }
 
   if (pathname === '/api/ai/confirm' && method === 'POST') {
@@ -1280,6 +1391,11 @@ async function handleApi(req, res, url) {
       actionId: body.actionId,
       decision: body.decision,
       session,
+    });
+    aiHistory.resolvePendingActionInHistory(session.username, {
+      actionId: body.actionId,
+      status: result.status,
+      output: result.output || result.summary,
     });
     return sendJson(res, 200, result);
   }

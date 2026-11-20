@@ -1402,6 +1402,148 @@ button:focus-visible {
   letter-spacing: 0.02em;
 }
 
+.ai-workspace {
+  display: grid;
+  grid-template-columns: 265px minmax(0, 1fr);
+  gap: 0.9rem;
+  align-items: stretch;
+}
+
+.ai-history-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  min-block-size: calc(100vh - 150px);
+  max-block-size: calc(100vh - 125px);
+  padding: 1rem;
+  min-inline-size: 0;
+}
+
+.ai-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-block-end: 0.65rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.ai-history-head > div {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.ai-history-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-block-size: 0;
+}
+
+.ai-history-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+  min-inline-size: 0;
+}
+
+.ai-history-item:hover {
+  background: var(--surface-elevated);
+  border-color: var(--border);
+}
+
+.ai-history-item.is-active {
+  background: color-mix(in srgb, var(--yc-primary-soft) 72%, var(--surface-elevated));
+  border-color: color-mix(in srgb, var(--yc-primary) 45%, var(--border));
+}
+
+.ai-history-item-main {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  text-align: start;
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+}
+
+.ai-history-item-title {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ai-history-item-meta {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ai-history-del {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.25rem 0.4rem;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  line-height: 1;
+  opacity: 0.65;
+  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
+}
+
+.ai-history-del:hover {
+  opacity: 1;
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.ai-history-empty {
+  padding: 1rem 0.4rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.ai-history-toggle {
+  display: none;
+}
+
+@media (max-width: 960px) {
+  .ai-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ai-history-toggle {
+    display: inline-flex;
+  }
+  .ai-history-pane {
+    display: none;
+    min-block-size: auto;
+    max-block-size: 280px;
+  }
+  .ai-history-pane.is-open {
+    display: flex;
+  }
+}
+
 .ai-card {
   display: flex;
   flex-direction: column;
@@ -1409,6 +1551,7 @@ button:focus-visible {
   min-height: calc(100vh - 150px);
   max-height: calc(100vh - 125px);
   padding: 1.1rem 1.2rem;
+  min-inline-size: 0;
 }
 
 .ai-toolbar {
