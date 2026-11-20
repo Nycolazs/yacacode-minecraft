@@ -918,7 +918,7 @@ export function createAiAssistant({
   }
 
   function getActiveGeminiConfig() {
-    const cfg = loadConfig();
+    const cfg = getEffectiveConfig();
     return {
       apiKey: cfg.apiKey || '',
       model: cfg.model || DEFAULT_MODEL,

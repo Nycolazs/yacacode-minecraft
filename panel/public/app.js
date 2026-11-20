@@ -3106,7 +3106,7 @@ async function connectWhatsApp() {
   try {
     await api('/api/whatsapp/connect', { method: 'POST', body: {} });
     toast('Gerando QR Code do WhatsApp...');
-    await loadWhatsAppStatus(true);
+    await loadWhatsAppStatus(false);
     ensureWhatsAppPolling();
   } catch (err) {
     toast(err.message, 'error');
