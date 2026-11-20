@@ -703,6 +703,21 @@ whatsapp = createWhatsAppManager({
         progressMessage: st.progress?.active ? st.progress.message : null,
       };
     },
+    get_world_info: async () => {
+      const [world, daytimeTicks] = await Promise.all([
+        Promise.resolve(playerData.getWorldOverview()),
+        queryWorldDaytimeTicks().catch(() => null),
+      ]);
+      if (!world) {
+        return { available: false, message: 'Dados do mundo (level.dat) indisponíveis no momento.' };
+      }
+      return {
+        available: true,
+        ...world,
+        daytimeTicks: daytimeTicks ?? null,
+        dayPhase: describeDayPhase(daytimeTicks),
+      };
+    },
   },
 });
 

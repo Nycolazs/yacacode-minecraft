@@ -115,6 +115,12 @@ function buildReadOnlyTools() {
             'Retorna informações sobre os backups do servidor no Google Drive (último backup, data/hora, tamanho, agendamento automático e se há backup rodando agora).',
           parameters: { type: 'OBJECT', properties: {} },
         },
+        {
+          name: 'get_world_info',
+          description:
+            'Retorna informações sobre o mundo atual do servidor Minecraft: nome do mundo, seed, coordenadas do spawn, dificuldade, modo de jogo padrão, dia atual, período do dia (manhã/tarde/noite) e clima (chuva/tempestade).',
+          parameters: { type: 'OBJECT', properties: {} },
+        },
       ],
     },
   ];
@@ -122,11 +128,17 @@ function buildReadOnlyTools() {
 
 function buildSystemInstruction(botName, serverName, mcDomain) {
   return [
-    `Você é ${botName}, o assistente de IA do servidor Minecraft "${serverName}" (${mcDomain}) atendendo no WhatsApp.`,
-    'Responda sempre em Português do Brasil (pt-BR), de forma simpática, clara, direta e bem formatada para WhatsApp.',
-    'Use formatação simples do WhatsApp (*negrito* com asterisco único, listas curtas com hífen ou bullet, emojis moderados). Nunca use tabelas Markdown complexas nem blocos de código longos.',
-    'SEMPRE consulte as ferramentas disponíveis para obter dados reais e atualizados antes de responder sobre status, jogadores online, relatórios, rankings, mortes ou backups. Nunca invente números ou nomes.',
-    'Você é estritamente informativo (somente leitura): NÃO executa comandos administrativos (kick, ban, restart, op, backup manual etc.). Se alguém pedir uma ação administrativa, explique educadamente que pelo WhatsApp você só informa dados e que ações de controle devem ser feitas no painel web.',
+    `Você é o ${botName}, o parceiro amigável que cuida de acompanhar o servidor de Minecraft "${serverName}" (${mcDomain}) no grupo do WhatsApp.`,
+    'Personalidade e estilo:',
+    '- Fale sempre em Português do Brasil (pt-BR) de um jeito bem humano, natural, leve, caloroso e descontraído — como um amigo da galera do servidor conversando no WhatsApp, sem soar robótico ou formal demais.',
+    '- Vá direto ao ponto sem ficar repetindo apresentações nem cumprimentos mecânicos toda hora ("Olá! Como posso ajudar hoje?"). Use um tom de conversa real.',
+    '- Use formatação leve do WhatsApp (*negrito* com asterisco único quando ajudar a destacar um nome ou número) e poucos emojis, só onde fizer sentido natural. Evite textões e nunca use tabelas Markdown.',
+    'Assunto permitido (REGRA ESTRITA):',
+    `- Você SÓ conversa sobre o servidor "${serverName}", o mundo atual do Minecraft (seed, spawn, clima, dia, dificuldade, construções, biomas, mecânicas do jogo), os jogadores, estatísticas, rankings e backups do servidor.`,
+    '- Se alguém puxar qualquer assunto fora do servidor/mundo de Minecraft (ex.: política, trabalho, programação, matemática, receitas, notícias, vida pessoal ou pedidos genéricos), desconverse de forma simpática, bem-humorada e curta, dizendo que você só manja mesmo do servidor e do mundo do Minecraft.',
+    'Dados reais e segurança:',
+    '- SEMPRE use as ferramentas disponíveis para consultar dados reais antes de responder sobre status, jogadores online, mundo, relatórios, rankings, mortes ou backups. Nunca chute nem invente números ou nomes.',
+    '- Você é somente informativo (leitura): não executa comandos administrativos (kick, ban, restart, op, backup manual etc.). Se pedirem, diga de boa que pelo WhatsApp você só acompanha e informa, e que controles ficam no painel web.',
   ].join('\n');
 }
 
@@ -294,15 +306,17 @@ export function createWhatsAppManager({
     return bridgeFetch('/groups', { method: 'GET', timeoutMs: 12000 });
   }
 
-  async function sendMessage(jid, text) {
+  async function sendMessage(jid, text, { quotedId = null } = {}) {
     const cleanJid = String(jid || '').trim();
     const cleanText = String(text || '').trim();
     if (!cleanJid || !cleanText) {
       throw Object.assign(new Error('Destino ou mensagem vazios.'), { status: 400 });
     }
+    const body = { jid: cleanJid, text: cleanText };
+    if (quotedId) body.quotedId = quotedId;
     return bridgeFetch('/send', {
       method: 'POST',
-      body: { jid: cleanJid, text: cleanText },
+      body,
       timeoutMs: 10000,
     });
   }
@@ -430,7 +444,7 @@ export function createWhatsAppManager({
     }
   }
 
-  async function generateAiReply({ chatJid, senderName, text, botName }) {
+  async function generateAiReply({ chatJid, senderName, text, quotedText = null, botName }) {
     const gemini = typeof getGeminiConfig === 'function' ? getGeminiConfig() : null;
     if (!gemini?.apiKey) {
       return `⚠️ A chave da API Gemini ainda não foi configurada no painel do ${serverName}.`;
@@ -441,7 +455,10 @@ export function createWhatsAppManager({
     const history =
       existing && now - existing.updatedAt < CHAT_HISTORY_TTL_MS ? existing.messages.slice(-8) : [];
 
-    const userPrompt = `[${senderName}]: ${text}`;
+    const quotePrefix = quotedText
+      ? `[Respondendo à mensagem: "${String(quotedText).slice(0, 200)}"]\n`
+      : '';
+    const userPrompt = `${quotePrefix}[${senderName}]: ${text}`;
     const contents = [
       ...history,
       { role: 'user', parts: [{ text: userPrompt }] },
@@ -489,7 +506,7 @@ export function createWhatsAppManager({
     }
 
     if (!replyText) {
-      replyText = 'Desculpe, não consegui consultar os dados agora. Tente novamente em alguns segundos.';
+      replyText = 'Poxa, não consegui consultar os dados do servidor agora. Tenta de novo já já!';
     }
 
     chatHistories.set(chatJid, {
@@ -556,9 +573,10 @@ export function createWhatsAppManager({
         chatJid,
         senderName,
         text,
+        quotedText: payload.quotedText || null,
         botName: cfg.botName,
       });
-      await sendMessage(chatJid, reply);
+      await sendMessage(chatJid, reply, { quotedId: isGroup ? messageId || null : null });
       pushLog(
         isGroup ? 'group' : 'private',
         `${senderName}: "${text.slice(0, 80)}"`,

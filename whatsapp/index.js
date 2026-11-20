@@ -28,6 +28,28 @@ let sock = null;
 let reconnectTimer = null;
 let manualDisconnect = false;
 let isConnecting = false;
+const sentMessageIds = new Set(); // IDs enviados pelo próprio bot (detecção infalível de quote/reply)
+const incomingMessagesCache = new Map(); // messageId -> { msg, ts } para responder dando quote
+
+function rememberSentMessageId(id) {
+  if (!id) return;
+  sentMessageIds.add(id);
+  if (sentMessageIds.size > 400) {
+    const first = sentMessageIds.values().next().value;
+    if (first) sentMessageIds.delete(first);
+  }
+}
+
+function cacheIncomingMessage(id, msg) {
+  if (!id || !msg) return;
+  const now = Date.now();
+  incomingMessagesCache.set(id, { msg, ts: now });
+  if (incomingMessagesCache.size > 200) {
+    for (const [k, v] of incomingMessagesCache.entries()) {
+      if (now - v.ts > 10 * 60 * 1000) incomingMessagesCache.delete(k);
+    }
+  }
+}
 
 const statusState = {
   state: 'disconnected', // disconnected | connecting | qr | connected
@@ -233,10 +255,15 @@ async function startSocket() {
       if (type !== 'notify' || !Array.isArray(messages)) return;
       const nowSec = Math.floor(Date.now() / 1000);
       const selfPhone = normalizePhoneFromJid(nextSock.user?.id);
+      const selfLid = normalizePhoneFromJid(nextSock.user?.lid);
 
       for (const msg of messages) {
         try {
-          if (!msg || !msg.message || msg.key?.fromMe) continue;
+          if (!msg || !msg.message) continue;
+          if (msg.key?.fromMe) {
+            rememberSentMessageId(msg.key?.id);
+            continue;
+          }
           const remoteJid = String(msg.key?.remoteJid || '');
           if (!remoteJid || remoteJid === 'status@broadcast' || remoteJid.endsWith('@newsletter')) {
             continue;
@@ -249,27 +276,36 @@ async function startSocket() {
           const text = extractMessageText(msg.message);
           if (!text) continue;
 
+          const msgId = msg.key?.id || null;
+          if (msgId) cacheIncomingMessage(msgId, msg);
+
           const isGroup = remoteJid.endsWith('@g.us');
           const senderJid = isGroup ? String(msg.key?.participant || '') : remoteJid;
           const senderPhone = normalizePhoneFromJid(senderJid);
           const ctx = extractContextInfo(msg.message);
           const mentionedJids = Array.isArray(ctx?.mentionedJid) ? ctx.mentionedJid : [];
-          const isMentioningBot =
-            Boolean(selfPhone) &&
-            mentionedJids.some((m) => normalizePhoneFromJid(m) === selfPhone);
+          const isMentioningBot = mentionedJids.some((m) => {
+            const norm = normalizePhoneFromJid(m);
+            return (Boolean(selfPhone) && norm === selfPhone) || (Boolean(selfLid) && norm === selfLid);
+          });
+
+          const quotedStanzaId = ctx?.stanzaId || null;
+          const quotedParticipant = normalizePhoneFromJid(ctx?.participant);
           const isReplyToBot =
-            Boolean(selfPhone) &&
-            Boolean(ctx?.participant) &&
-            normalizePhoneFromJid(ctx.participant) === selfPhone;
+            (Boolean(quotedStanzaId) && sentMessageIds.has(quotedStanzaId)) ||
+            (Boolean(selfPhone) && Boolean(quotedParticipant) && quotedParticipant === selfPhone) ||
+            (Boolean(selfLid) && Boolean(quotedParticipant) && quotedParticipant === selfLid);
+          const quotedText = ctx?.quotedMessage ? extractMessageText(ctx.quotedMessage) : '';
 
           await forwardIncomingToPanel({
-            messageId: msg.key?.id || null,
+            messageId: msgId,
             chatJid: remoteJid,
             isGroup,
             senderJid,
             senderPhone,
             pushName: msg.pushName || senderPhone || 'Jogador',
             text,
+            quotedText: quotedText || null,
             isMentioningBot,
             isReplyToBot,
             timestamp: msgTs ? new Date(msgTs * 1000).toISOString() : new Date().toISOString(),
@@ -423,10 +459,16 @@ const server = http.createServer(async (req, res) => {
       const body = await readJsonBody(req);
       const jid = String(body.jid || '').trim();
       const text = String(body.text || '').trim();
+      const quotedId = String(body.quotedId || '').trim();
       if (!jid || !text) {
         return sendJson(res, 400, { error: 'Informe jid e text.' });
       }
-      const sent = await sock.sendMessage(jid, { text });
+      const sendOpts = {};
+      if (quotedId && incomingMessagesCache.has(quotedId)) {
+        sendOpts.quoted = incomingMessagesCache.get(quotedId).msg;
+      }
+      const sent = await sock.sendMessage(jid, { text }, sendOpts);
+      rememberSentMessageId(sent?.key?.id);
       return sendJson(res, 200, {
         ok: true,
         messageId: sent?.key?.id || null,
