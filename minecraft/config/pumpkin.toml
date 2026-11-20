@@ -71,7 +71,7 @@ enabled = true
 enabled = true
 address = "0.0.0.0:25565"
 encryption = true
-online_mode = true
+online_mode = false
 max_players = 6
 view_distance = 8
 simulation_distance = 6
@@ -114,7 +114,7 @@ kick_message = "Kicked for spamming packets"
 
 [networking.bedrock]
 enabled = true
-online_mode = true
+online_mode = false
 max_players = 6
 view_distance = 8
 simulation_distance = 6
