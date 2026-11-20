@@ -726,7 +726,7 @@ whatsapp = createWhatsAppManager({
 
 // Coletor leve em segundo plano para gráficos de telemetria (a cada 15s)
 let lastMcStats = null;
-let lastAnalyticsSampleAt = 0;
+let lastAnalyticsSampleAt = Date.now() - 14 * 60 * 1000;
 let lastObservedMcOnline = null;
 async function pollTelemetry() {
   try {
