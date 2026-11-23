@@ -1,4 +1,5 @@
 // ============================================================================
+import { getBotName } from './persona.js';
 // Jorge — Bot de Chat Global In-Game (Somente Conversa & Dúvidas — ZERO Comandos)
 // ============================================================================
 // Escuta o stream de logs do container Minecraft (Pumpkin Rust ou Paper)
@@ -11,7 +12,10 @@
 // ============================================================================
 
 // Reconhece a palavra isolada "jorge" (case-insensitive, com ou sem @/! opcional)
-const JORGE_CALL_RE = /(?:^|[^\p{L}\p{N}_])[@!]?jorge(?=$|[^\p{L}\p{N}_])/iu;
+const escapeRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function callRe(botName) {
+  return new RegExp(`(?:^|[^\\p{L}\\p{N}_])[@!]?${escapeRe(botName)}(?=$|[^\\p{L}\\p{N}_])`, 'iu');
+}
 
 // Formatos suportados:
 // 1) Pumpkin Rust: "22:21:56  INFO <chat> EddScissors42: jorge qual camada de diamante?"
@@ -26,12 +30,12 @@ export function stripAnsi(text) {
   return String(text || '').replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
 }
 
-export function parseMinecraftChatLine(rawLine) {
+export function parseMinecraftChatLine(rawLine, botName = getBotName()) {
   const line = stripAnsi(rawLine).trim();
   if (!line) return null;
 
   // Ignora eco das próprias respostas do Jorge ou mensagens do servidor
-  if (line.includes('[Jorge]') || line.includes('[YacaCode IA]') || line.includes('[Server]')) {
+  if (line.includes(`[${botName}]`) || line.includes('[YacaCode IA]') || line.includes('[Server]')) {
     return null;
   }
 
@@ -44,15 +48,15 @@ export function parseMinecraftChatLine(rawLine) {
   const player = match[1].trim();
   const message = match[2].trim();
   if (!player || !message) return null;
-  if (IGNORED_SENDERS.has(player.toLowerCase())) return null;
+  if (IGNORED_SENDERS.has(player.toLowerCase()) || player.toLowerCase() === botName.toLowerCase()) return null;
 
   // Só responde se o jogador realmente chamou "Jorge" / "jorge"
-  if (!JORGE_CALL_RE.test(message)) {
+  if (!callRe(botName).test(message)) {
     return null;
   }
 
   // Se começou direto com "jorge, ..." limpa o vocativo inicial; mantém o resto intacto
-  const cleaned = message.replace(/^[@!]?jorge\b[\s,:!?-]*/i, '').trim();
+  const cleaned = message.replace(new RegExp(`^[@!]?${escapeRe(botName)}(?=$|[^\\p{L}\\p{N}_])[\\s,:!?-]*`, 'iu'), '').trim();
   const question = (cleaned || message).slice(0, 300);
 
   return { player, question };
@@ -104,7 +108,7 @@ export function buildTellrawCommand(player, lineText, isFirstLine = true) {
 
   const components = [
     '',
-    { text: '[Jorge] ', color: 'green', bold: true },
+    { text: `[${getBotName()}] `, color: 'green', bold: true },
   ];
   if (isFirstLine && safePlayer) {
     components.push({ text: `@${safePlayer} `, color: 'gold' });
@@ -121,7 +125,7 @@ export function buildSayFallbackCommand(player, lineText, isFirstLine = true) {
   const safePlayer = String(player || '')
     .replace(/[^a-zA-Z0-9_.-]/g, '')
     .slice(0, 32);
-  const prefix = isFirstLine && safePlayer ? `[Jorge] @${safePlayer}: ` : '[Jorge] ';
+  const prefix = isFirstLine && safePlayer ? `[${getBotName()}] @${safePlayer}: ` : `[${getBotName()}] `;
   return `say ${prefix}${safeText}`;
 }
 

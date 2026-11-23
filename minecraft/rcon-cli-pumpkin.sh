@@ -12,11 +12,7 @@ fi
 # Remove barra inicial caso o usuário digite /op ou /list
 CMD="${CMD#/}"
 
-# Traduz "save-all" / "save-all flush" (comandos clássicos Paper) caso necessário
-if [[ "$CMD" == "save-all"* ]]; then
-  echo "[YacaCode Rust] O motor Pumpkin salva os chunks continuamente em Rust."
-  exit 0
-fi
+# "save-all [flush]" é repassado ao Pumpkin (grava os chunks no disco imediatamente)
 
 if [[ "$CMD" == "tps" ]]; then
   echo "TPS from last 1m, 5m, 15m: 20.0, 20.0, 20.0 (Rust Native Engine)"

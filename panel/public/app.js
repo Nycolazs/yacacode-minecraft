@@ -378,9 +378,17 @@ function switchTab(tab) {
     connectAiSync();
   }
   if (tab === 'whatsapp') loadWhatsAppStatus();
-  if (tab === 'console') connectSse();
+  if (tab === 'console') {
+    connectSse();
+    startConsoleMetrics();
+  } else {
+    stopConsoleMetrics();
+  }
   if (tab === 'players') loadPlayers();
-  if (tab === 'settings') loadProperties();
+  if (tab === 'settings') {
+    loadProperties();
+    loadJvmArgs();
+  }
   if (tab === 'plugins') loadPlugins();
   if (tab === 'files') loadFiles(state.currentDir);
   if (tab === 'backups') loadBackups();
@@ -919,6 +927,10 @@ function connectSse() {
     if (info.connected) {
       $('#sse-dot').className = 'dot dot-ok';
       $('#sse-status').textContent = `Conectado (${info.container})`;
+    }
+    if (info.reconnecting) {
+      $('#sse-dot').className = 'dot dot-warn';
+      $('#sse-status').textContent = 'Server reiniciando, reconectando...';
     }
     if (info.error) {
       $('#sse-dot').className = 'dot dot-danger';
@@ -3205,3 +3217,122 @@ function bindWhatsAppEvents() {
 bindEvents();
 bindWhatsAppEvents();
 bootstrap();
+
+
+// ----------------------------------------------------------------------------
+// CONSOLE: LATERAL "SERVER AGORA" (TPS, TEMPO POR TICK, CPU, RAM, JOGADORES)
+// ----------------------------------------------------------------------------
+function cmLevel(el, level) {
+  el.classList.remove('cm-ok', 'cm-warn', 'cm-bad');
+  if (level) el.classList.add(`cm-${level}`);
+}
+
+function fmtGb(bytes) {
+  return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+}
+
+async function refreshConsoleMetrics() {
+  try {
+    const m = await api('/api/console/metrics');
+    const tpsEl = $('#cm-tps');
+    if (!m.running) {
+      tpsEl.textContent = 'offline';
+      cmLevel(tpsEl, 'bad');
+      ['#cm-mspt', '#cm-cpu', '#cm-ram', '#cm-players'].forEach((id) => ($(id).textContent = '—'));
+    } else {
+      if (m.tps) {
+        tpsEl.textContent = m.tps.m1.toFixed(1);
+        cmLevel(tpsEl, m.tps.m1 >= 19 ? 'ok' : m.tps.m1 >= 15 ? 'warn' : 'bad');
+        $('#cm-tps-sub').textContent = `${m.tps.m1.toFixed(1)} / ${m.tps.m5.toFixed(1)} / ${m.tps.m15.toFixed(1)} (1m / 5m / 15m)`;
+      }
+      if (m.mspt) {
+        const el = $('#cm-mspt');
+        el.textContent = `${m.mspt.avg.toFixed(1)} ms`;
+        cmLevel(el, m.mspt.avg < 35 ? 'ok' : m.mspt.avg < 50 ? 'warn' : 'bad');
+        $('#cm-mspt-sub').textContent = `média ${m.mspt.avg.toFixed(1)} · pior ${m.mspt.max.toFixed(0)} ms (10s) · limite 50 ms`;
+      }
+      if (m.cpuPercent != null) {
+        const el = $('#cm-cpu');
+        el.textContent = `${m.cpuPercent.toFixed(0)}%${m.cpuCoresUsed != null ? ` · ${m.cpuCoresUsed} núcleos` : ''}`;
+        cmLevel(el, m.cpuPercent < 60 ? 'ok' : m.cpuPercent < 85 ? 'warn' : 'bad');
+        $('#cm-cpu-bar').style.width = `${Math.min(100, m.cpuPercent)}%`;
+      }
+      if (m.memUsedBytes != null && m.memLimitBytes) {
+        const pct = (m.memUsedBytes / m.memLimitBytes) * 100;
+        const el = $('#cm-ram');
+        el.textContent = `${fmtGb(m.memUsedBytes)} de ${fmtGb(m.memLimitBytes)}`;
+        cmLevel(el, pct < 80 ? 'ok' : pct < 92 ? 'warn' : 'bad');
+        $('#cm-ram-bar').style.width = `${Math.min(100, pct)}%`;
+      }
+      if (m.players) {
+        $('#cm-players').textContent = `${m.players.online} / ${m.players.max}`;
+        $('#cm-players-list').textContent = m.players.names.length ? m.players.names.join(', ') : 'Ninguém online';
+      }
+    }
+    const tempEl = $('#cm-temp');
+    if (m.tempC != null) {
+      tempEl.textContent = `${Math.round(m.tempC)} °C`;
+      cmLevel(tempEl, m.tempC < 65 ? 'ok' : m.tempC < 75 ? 'warn' : 'bad');
+    }
+    $('#cm-updated').textContent = `atualizado ${new Date().toLocaleTimeString('pt-BR')}`;
+  } catch {
+    $('#cm-updated').textContent = 'sem dados';
+  }
+}
+
+function startConsoleMetrics() {
+  stopConsoleMetrics();
+  refreshConsoleMetrics();
+  state.consoleMetricsTimer = setInterval(() => {
+    if (!document.hidden) refreshConsoleMetrics();
+  }, 5000);
+}
+
+function stopConsoleMetrics() {
+  if (state.consoleMetricsTimer) {
+    clearInterval(state.consoleMetricsTimer);
+    state.consoleMetricsTimer = null;
+  }
+}
+
+// ----------------------------------------------------------------------------
+// CONFIGURAÇÕES: PARÂMETROS DA JVM
+// ----------------------------------------------------------------------------
+async function loadJvmArgs() {
+  const card = $('#jvm-card');
+  if (!card) return;
+  const isAdmin = state.currentUser?.role === 'admin';
+  card.classList.toggle('hidden', !isAdmin);
+  if (!isAdmin) return;
+  try {
+    const data = await api('/api/config/jvm');
+    $('#jvm-args').value = data.args || '';
+    $('#jvm-status').textContent = data.rejected
+      ? `O Java recusou estes parâmetros no último início e o server subiu com os padrões: ${data.rejected.replace(/\s+/g, ' ')}`
+      : data.args
+      ? ''
+      : 'Nenhum parâmetro extra (usando os padrões do server).';
+  } catch (err) {
+    $('#jvm-status').textContent = `Não foi possível ler: ${err.message}`;
+  }
+}
+
+async function saveJvmArgs() {
+  const btn = $('#btn-save-jvm');
+  btn.disabled = true;
+  try {
+    const data = await api('/api/config/jvm', { method: 'PUT', body: { args: $('#jvm-args').value } });
+    $('#jvm-args').value = data.args || '';
+    $('#jvm-status').textContent = 'Salvo. Reinicie o server para aplicar.';
+    toast('Parâmetros da JVM salvos — reinicie o server para aplicar.');
+  } catch (err) {
+    $('#jvm-status').textContent = err.message;
+    toast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  $('#btn-save-jvm')?.addEventListener('click', saveJvmArgs);
+});

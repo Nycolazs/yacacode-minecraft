@@ -439,6 +439,7 @@
              TAB 2: CONSOLE AO VIVO
              =================================================================== -->
         <section id="tab-console" class="tab-panel" aria-label="Console interativo ao vivo">
+          <div class="console-layout">
           <article class="card console-card">
             <div class="console-toolbar">
               <div class="console-status-group">
@@ -475,10 +476,49 @@
             <form id="console-form" class="console-input-row">
               <span class="console-prompt" aria-hidden="true">&gt;</span>
               <label for="console-input" class="sr-only">Enviar comando RCON</label>
-              <input id="console-input" type="text" placeholder="Digite um comando do Minecraft (ex: say Olá YacaCode!, op Jogador, chunky start)..." autocomplete="off">
+              <input id="console-input" type="text" placeholder="Digite um comando do Minecraft (ex: say Olá!, op Jogador, chunky start)..." autocomplete="off">
               <button type="submit" class="btn btn-primary">Enviar</button>
             </form>
           </article>
+
+          <aside class="card console-metrics" aria-label="Desempenho do server agora">
+            <div class="console-metrics-head">
+              <h3>Server agora</h3>
+              <span id="cm-updated" class="muted-text">—</span>
+            </div>
+            <div class="cm-tile">
+              <span class="cm-label">TPS</span>
+              <strong id="cm-tps" class="cm-value">—</strong>
+              <span id="cm-tps-sub" class="cm-sub">1m / 5m / 15m</span>
+            </div>
+            <div class="cm-tile">
+              <span class="cm-label">Tempo por tick</span>
+              <strong id="cm-mspt" class="cm-value">—</strong>
+              <span id="cm-mspt-sub" class="cm-sub">média / pior (10s) · limite 50 ms</span>
+            </div>
+            <div class="cm-tile">
+              <span class="cm-label">CPU</span>
+              <strong id="cm-cpu" class="cm-value">—</strong>
+              <div class="cm-bar"><span id="cm-cpu-bar"></span></div>
+            </div>
+            <div class="cm-tile">
+              <span class="cm-label">Memória RAM</span>
+              <strong id="cm-ram" class="cm-value">—</strong>
+              <div class="cm-bar"><span id="cm-ram-bar"></span></div>
+            </div>
+            <div class="cm-row">
+              <div class="cm-tile">
+                <span class="cm-label">Jogadores</span>
+                <strong id="cm-players" class="cm-value">—</strong>
+              </div>
+              <div class="cm-tile">
+                <span class="cm-label">Temperatura</span>
+                <strong id="cm-temp" class="cm-value">—</strong>
+              </div>
+            </div>
+            <p id="cm-players-list" class="cm-sub"></p>
+          </aside>
+          </div>
         </section>
 
         <!-- ===================================================================
@@ -578,6 +618,23 @@
               </p>
             </div>
             <button id="btn-apply-presets" type="button" class="btn btn-primary">⚡ Aplicar Presets YacaCode</button>
+          </article>
+
+          <article class="card" id="jvm-card">
+            <div class="card-head">
+              <div>
+                <h3>Parâmetros de inicialização da JVM</h3>
+                <p class="muted-text">
+                  Um parâmetro por linha (ex.: <code>-Xmx2G</code>, <code>-XX:+UseG1GC</code>). Entram depois dos padrões do
+                  server, então também ajustam a memória (máximo <code>-Xmx2048M</code>, o container tem 2,5 GB).
+                  Valem no próximo reinício do server.
+                </p>
+              </div>
+              <button id="btn-save-jvm" type="button" class="btn btn-primary">Salvar parâmetros</button>
+            </div>
+            <label for="jvm-args" class="sr-only">Parâmetros da JVM</label>
+            <textarea id="jvm-args" class="jvm-textarea" rows="6" spellcheck="false" placeholder="-XX:+UseG1GC&#10;-XX:MaxGCPauseMillis=200"></textarea>
+            <p id="jvm-status" class="muted-text"></p>
           </article>
 
           <article class="card">

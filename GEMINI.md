@@ -20,13 +20,18 @@ Projeto de servidor Minecraft 24/7 cross-play (**Java + Bedrock**) + painel admi
 ## 3. Arquitetura Atual em Produção no Orange Pi (`orangepi:~/yacacode-minecraft`)
 
 ### Containers Docker (`docker compose` em `~/yacacode-minecraft`)
-1. **`yacacode-mc`** (`minecraft/Dockerfile.pumpkin` -> `yacacode-pumpkin-rust:latest`):
-   - Engine **Pumpkin em Rust (`0.2.2+26.3-26.63`)** — nativa para **Java 26.3 (`25565/tcp`)** e **Bedrock 1.26.63 NetherNet (`19132/tcp+udp`, descoberta LAN `7551/udp`)**.
-   - Consumo real típico: **~60 MB RAM**, **~1–2% CPU**, temperatura **~45–47 °C** (migrado do Paper Java 25 que consumia ~1.5 GB RAM e 56–60 °C).
-   - Limite `mem_limit: 768m`; configurações em `minecraft/config/pumpkin.toml` e entrypoint `minecraft/entrypoint-pumpkin.sh`.
-   - Engine legada PaperMC Java 25 + Geyser/Floodgate permanece disponível sob `profiles: ["paper-java"]` no `docker-compose.yml` caso um dia o usuário queira voltar para plugins Spigot/Paper.
+1. **`yacacode-mc`** (`itzg/minecraft-server:java25`, `TYPE=PAPER`, `VERSION=26.3`, `PAPER_BUILD=257`) — **em produção desde 21/11/2026**:
+   - **Paper 26.3 + GeyserMC 2.12.1** (Bedrock via NetherNet em `19132/tcp+udp`), **sem Floodgate**: Geyser com `auth-type: offline` e `validate-bedrock-login: false`. Java e Bedrock com o mesmo nick são o **mesmo jogador** (mesmo UUID offline `OfflinePlayer:<nick>`, mesmo inventário) — por isso o crossplay-sync do painel fica desligado com Paper.
+   - `online-mode=false`, sem whitelist, sem OP, `enable-command-block=false` (um invasor deixou um bloco de comando de spam em 21/11), view 12 / simulação 6, `pause-when-empty-seconds=60`, limite `mem_limit: 2560m` / heap 2 GB.
+   - Parâmetros extras da JVM: `JVM_OPTS` inclui `@/data/.yacacode-jvm-args.txt`, editável no painel (Configurações → JVM, validado: `-Xmx` ≤ 2048M).
+   - Plugins fixos em `minecraft/data/plugins`: Geyser-Spigot (SHA-256 verificado), SkinsRestorer, Chunky (`update-interval: 60`).
+   - Manutenção automática pelo painel (`panel/lib/maintenance.js`, estado em `minecraft/data/.yacacode-maintenance.json`): pré-geração Chunky (raio 1500, só com server vazio, pausa quando alguém entra) e reinício diário às 5h se vazio e rodando há 6h+.
+   - **Rollback Pumpkin:** `minecraft/pumpkin-legacy` (mundo `.pump`, binários, senhas) + serviço `minecraft-pumpkin` (`profiles: ["pumpkin"]`). Para converter mundo Pumpkin → Paper: `pumpkin --convert-world anvil` **e depois** `~/minecraft-paper/fix_palettes.py` (máquina avell-f13): o conversor grava paletas `{Name,Properties}` e o Paper 26.3 lê tudo como ar; também foi preciso recalcular luz e heightmaps (`fix_light.py`, `fix_heightmaps.py`) e converter advancements.
+   - Velocity foi removido (`profiles: ["velocity"]`).
 2. **`yacacode-panel`** (`panel/Dockerfile` -> `yacacode-mc-panel:latest`):
-   - Node 22 **zero dependências externas** (`panel/server.js`, `panel/lib/{ai,auth,docker,files,gdrive,ingame-chat,mcping,playerdata,rcon,system}.js`, `panel/public/{index.html,styles.css,app.js}`).
+   - Node 22 **zero dependências externas** (`panel/server.js`, `panel/lib/{ai,auth,docker,files,gdrive,ingame-chat,jvm-args,maintenance,mcping,persona,playerdata,rcon,system,whatsapp}.js`, `panel/public/{index.html,styles.css,app.js}`).
+   - **IA única ("Jorge")** em `panel/lib/persona.js`: mesma personalidade e memória compartilhada no painel, WhatsApp e chat do jogo; só o painel executa ações (por cargo). Memória de canais privados (painel, WhatsApp privado) nunca aparece em canais públicos. Modelo `gemini-3.8-flash` (12s) com fallback para Flash-Lite.
+   - Backups no Drive: **nunca com gente jogando** — um logo após o último sair (`save-all flush` antes) e o de 6h só com server vazio.
    - Porta `8080`, ~18 MB RAM.
    - **Multi-usuário com RBAC** (`admin`, `moderator`, `viewer`) persistido em `/mc-data/.yacacode-panel-users.json` (usuário dono: `nycolas`; credenciais/segredos ficam em `orangepi:~/yacacode-minecraft/.env`).
    - **Assistente IA Gemini (`panel/lib/ai.js` + `panel/lib/playerdata.js` + `panel/lib/ingame-chat.js`):** chat integrado no painel com Function Calling nativo (REST API Gemini, default `gemini-3.5-flash-lite` com fallback automático), leitura de jogadores/nível XP (console + NBT `.dat`), logs, telemetria, execução de comandos respeitando RBAC e confirmação em 1 clique para ações destrutivas (`ban`, `kick`, `clear`, `kill`, `stop`, `restart`). Inclui também o bot **Jorge** no chat global do jogo (responde somente quando chamado por `Jorge`/`jorge`, sem `@` ou `!`), restrito a dúvidas e conversa sobre Minecraft (**ZERO tools / ZERO execução de comandos**). Chave API e toggle do chat in-game configuráveis via `.env` (`GEMINI_API_KEY`) ou no painel (Admin, `/mc-data/.yacacode-ai-config.json` modo `0600`).
@@ -80,4 +85,4 @@ Projeto de servidor Minecraft 24/7 cross-play (**Java + Bedrock**) + painel admi
 - **Concluído e validado em produção:**
   - DNS `A` `mc.yacacode.com -> 45.179.88.242` (Proxy OFF / DNS Only) propagado em `1.1.1.1` e `8.8.8.8`.
   - Relay TCP/UDP na **`vps-relay` (`100.115.95.11` / IP público `45.179.88.242`)** ativo 24/7 via `yacacode-mc-relay.service` encaminhando `25565/tcp`, `19132/tcp` e `19132/udp` para `100.73.198.14`.
-  - `external_ip = "45.179.88.242"` configurado no Bedrock NetherNet do Pumpkin (`minecraft/config/pumpkin.toml` e produção).
+  - Geyser anuncia `advertise-addresses: ["45.179.88.242", "100.73.198.14"]` (`minecraft/data/plugins/Geyser-Spigot/config.yml`).

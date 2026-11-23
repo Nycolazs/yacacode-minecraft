@@ -1,0 +1,204 @@
+diff --git a/crates/pumpkin-core/src/entity/mob/skeleton/bogged.rs b/crates/pumpkin-core/src/entity/mob/skeleton/bogged.rs
+index bcec85e..c032d24 100644
+--- a/crates/pumpkin-core/src/entity/mob/skeleton/bogged.rs
++++ b/crates/pumpkin-core/src/entity/mob/skeleton/bogged.rs
+@@ -142,4 +142,13 @@ impl Mob for BoggedSkeletonEntity {
+         self.entity
+             .populate_default_equipment_enchantments(difficulty);
+     }
++
++    fn finalize_spawn(
++        &self,
++        world: &Arc<World>,
++        _reason: crate::entity::mob::spawn::EntitySpawnReason,
++        group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
++    ) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
++        super::finalize_skeleton_spawn(self, world, group_data)
++    }
+ }
+diff --git a/crates/pumpkin-core/src/entity/mob/skeleton/mod.rs b/crates/pumpkin-core/src/entity/mob/skeleton/mod.rs
+index 3d65034..a90a598 100644
+--- a/crates/pumpkin-core/src/entity/mob/skeleton/mod.rs
++++ b/crates/pumpkin-core/src/entity/mob/skeleton/mod.rs
+@@ -93,6 +93,20 @@ impl SkeletonEntityBase {
+     }
+ }
+ 
++/// Vanilla `AbstractSkeleton.finalizeSpawn`: the bow (or the wither skeleton's sword), armor and
++/// their enchantments. Without it naturally spawned skeletons had empty hands, since the natural
++/// spawner never runs `init_data_tracker` (which only equips spawn-egg/command spawns).
++pub fn finalize_skeleton_spawn<M: Mob>(
++    mob: &M,
++    world: &Arc<World>,
++    group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
++) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
++    let difficulty = RegionalDifficulty::at(world, mob.get_entity().pos.load());
++    mob.populate_default_equipment_slots(world, &difficulty);
++    mob.populate_default_equipment_enchantments(&difficulty);
++    mob.default_finalize_spawn(world, group_data)
++}
++
+ pub fn wants_to_pick_up<M: Mob + ?Sized>(mob: &M, stack: &ItemStack) -> bool {
+     !stack
+         .item
+diff --git a/crates/pumpkin-core/src/entity/mob/skeleton/parched.rs b/crates/pumpkin-core/src/entity/mob/skeleton/parched.rs
+index 84c8cc7..6699bc2 100644
+--- a/crates/pumpkin-core/src/entity/mob/skeleton/parched.rs
++++ b/crates/pumpkin-core/src/entity/mob/skeleton/parched.rs
+@@ -4,9 +4,11 @@ use pumpkin_data::sound::Sound;
+ use pumpkin_util::math::position::BlockPos;
+ use std::sync::Arc;
+ 
++use crate::world::World;
++
+ use crate::entity::{
+     Entity, EntityBase,
+-    mob::{Mob, MobEntity, skeleton::SkeletonEntityBase},
++    mob::{Mob, MobEntity, equipment::RegionalDifficulty, skeleton::SkeletonEntityBase},
+ };
+ 
+ pub struct ParchedSkeletonEntity {
+@@ -34,4 +36,27 @@ impl Mob for ParchedSkeletonEntity {
+     fn get_mob_entity(&self) -> &MobEntity {
+         &self.entity.mob_entity
+     }
++
++    fn populate_default_equipment_slots(
++        &self,
++        world: &Arc<World>,
++        difficulty: &RegionalDifficulty,
++    ) {
++        self.entity
++            .populate_default_equipment_slots(world, difficulty);
++    }
++
++    fn populate_default_equipment_enchantments(&self, difficulty: &RegionalDifficulty) {
++        self.entity
++            .populate_default_equipment_enchantments(difficulty);
++    }
++
++    fn finalize_spawn(
++        &self,
++        world: &Arc<World>,
++        _reason: crate::entity::mob::spawn::EntitySpawnReason,
++        group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
++    ) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
++        super::finalize_skeleton_spawn(self, world, group_data)
++    }
+ }
+diff --git a/crates/pumpkin-core/src/entity/mob/skeleton/skeleton.rs b/crates/pumpkin-core/src/entity/mob/skeleton/skeleton.rs
+index ce8206a..2a56d88 100644
+--- a/crates/pumpkin-core/src/entity/mob/skeleton/skeleton.rs
++++ b/crates/pumpkin-core/src/entity/mob/skeleton/skeleton.rs
+@@ -48,4 +48,13 @@ impl Mob for SkeletonEntity {
+         self.entity
+             .populate_default_equipment_enchantments(difficulty);
+     }
++
++    fn finalize_spawn(
++        &self,
++        world: &Arc<World>,
++        _reason: crate::entity::mob::spawn::EntitySpawnReason,
++        group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
++    ) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
++        super::finalize_skeleton_spawn(self, world, group_data)
++    }
+ }
+diff --git a/crates/pumpkin-core/src/entity/mob/skeleton/stray.rs b/crates/pumpkin-core/src/entity/mob/skeleton/stray.rs
+index 4b3c42f..b5cea75 100644
+--- a/crates/pumpkin-core/src/entity/mob/skeleton/stray.rs
++++ b/crates/pumpkin-core/src/entity/mob/skeleton/stray.rs
+@@ -4,9 +4,11 @@ use pumpkin_data::sound::Sound;
+ use pumpkin_util::math::position::BlockPos;
+ use std::sync::Arc;
+ 
++use crate::world::World;
++
+ use crate::entity::{
+     Entity, EntityBase,
+-    mob::{Mob, MobEntity, skeleton::SkeletonEntityBase},
++    mob::{Mob, MobEntity, equipment::RegionalDifficulty, skeleton::SkeletonEntityBase},
+ };
+ 
+ pub struct StraySkeletonEntity {
+@@ -33,4 +35,27 @@ impl Mob for StraySkeletonEntity {
+     fn get_mob_entity(&self) -> &MobEntity {
+         &self.entity.mob_entity
+     }
++
++    fn populate_default_equipment_slots(
++        &self,
++        world: &Arc<World>,
++        difficulty: &RegionalDifficulty,
++    ) {
++        self.entity
++            .populate_default_equipment_slots(world, difficulty);
++    }
++
++    fn populate_default_equipment_enchantments(&self, difficulty: &RegionalDifficulty) {
++        self.entity
++            .populate_default_equipment_enchantments(difficulty);
++    }
++
++    fn finalize_spawn(
++        &self,
++        world: &Arc<World>,
++        _reason: crate::entity::mob::spawn::EntitySpawnReason,
++        group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
++    ) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
++        super::finalize_skeleton_spawn(self, world, group_data)
++    }
+ }
+diff --git a/crates/pumpkin-core/src/entity/mob/skeleton/wither.rs b/crates/pumpkin-core/src/entity/mob/skeleton/wither.rs
+index ff73f50..7215ebd 100644
+--- a/crates/pumpkin-core/src/entity/mob/skeleton/wither.rs
++++ b/crates/pumpkin-core/src/entity/mob/skeleton/wither.rs
+@@ -2,6 +2,8 @@ use pumpkin_data::item_stack::ItemStack;
+ use pumpkin_data::tag::Taggable;
+ use std::sync::Arc;
+ 
++use crate::world::World;
++
+ use pumpkin_data::BlockState;
+ use pumpkin_data::effect::StatusEffect;
+ use pumpkin_data::potion::Effect;
+@@ -12,7 +14,7 @@ use crate::entity::{
+     Entity, EntityBase,
+     ai::behavior::hunting::Hunt,
+     ai::target_match::TargetMatch,
+-    mob::{Mob, MobEntity, skeleton::SkeletonEntityBase},
++    mob::{Mob, MobEntity, equipment::RegionalDifficulty, skeleton::SkeletonEntityBase},
+     projectile::arrow::ArrowEntity,
+ };
+ 
+@@ -49,6 +51,30 @@ impl Mob for WitherSkeletonEntity {
+         &self.entity.mob_entity
+     }
+ 
++    // Vanilla `WitherSkeleton.populateDefaultEquipmentSlots`: always a stone sword, no armor.
++    fn populate_default_equipment_slots(
++        &self,
++        _world: &Arc<World>,
++        _difficulty: &RegionalDifficulty,
++    ) {
++        let _ = self.entity.mob_entity.set_item_slot(
++            &pumpkin_data::data_component_impl::EquipmentSlot::MAIN_HAND,
++            ItemStack::new(1, &pumpkin_data::item::Item::STONE_SWORD),
++        );
++    }
++
++    // Vanilla `WitherSkeleton.populateDefaultEquipmentEnchantments` does nothing.
++    fn populate_default_equipment_enchantments(&self, _difficulty: &RegionalDifficulty) {}
++
++    fn finalize_spawn(
++        &self,
++        world: &Arc<World>,
++        _reason: crate::entity::mob::spawn::EntitySpawnReason,
++        group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
++    ) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
++        super::finalize_skeleton_spawn(self, world, group_data)
++    }
++
+     fn on_attack(&self, target: &dyn EntityBase) {
+         if let Some(living) = target.get_living_entity() {
+             living.add_effect(Effect {

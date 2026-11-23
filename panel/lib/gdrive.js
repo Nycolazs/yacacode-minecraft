@@ -21,7 +21,8 @@ const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 
 const UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024; // 4 MiB (múltiplo de 256 KiB exigido pelo Google)
 const OAUTH_STATE_TTL_MS = 15 * 60 * 1000;
-const SCHEDULER_TICK_MS = 5 * 60 * 1000;
+const SCHEDULER_TICK_MS = 60 * 1000;
+const LIVE_PREFIX = 'yacacode-live';
 
 const DEFAULT_SETTINGS = {
   enabled: false,
@@ -31,6 +32,12 @@ const DEFAULT_SETTINGS = {
   maxBackups: 10,
   autoUploadOnManual: true,
   skipIfNoActivity: true,
+  // Nunca faz backup com gente jogando: faz um logo depois que o último jogador sai
+  backupAfterLogout: true,
+  liveMaxBackups: 16,
+  // Com alguém jogando, limita o upload (KB/s) para não saturar o Wi-Fi e dar lag no jogo (0 = sem limite)
+  uploadLimitKBpsWhilePlaying: 300,
+  lastLiveBackupAt: null,
 };
 
 function maskSecret(val) {
@@ -63,6 +70,10 @@ export function createGoogleDriveBackupManager({
   getBackupFilePath,
   getWorldLastModifiedMs,
   onBackupFinished = null,
+  getOnlinePlayerCount = null,
+  beforeBackup = null,
+  afterBackup = null,
+  logoutDebounceMs = 60 * 1000,
   chunkSizeBytes = UPLOAD_CHUNK_BYTES,
 }) {
   const hmacKey = sessionSecret || crypto.randomBytes(32).toString('hex');
@@ -628,9 +639,23 @@ export function createGoogleDriveBackupManager({
     const uploadStartMs = Date.now();
     onChunkProgress?.({ uploadedBytes: 0, totalBytes, speedBps: 0 });
 
+    const throttleStep = 256 * 1024;
+    async function currentLimitBps() {
+      const limitKBps = Number(loadConfig().uploadLimitKBpsWhilePlaying) || 0;
+      if (limitKBps <= 0 || typeof getOnlinePlayerCount !== 'function') return 0;
+      try {
+        return (Number(await getOnlinePlayerCount()) || 0) > 0 ? limitKBps * 1024 : 0;
+      } catch {
+        return 0;
+      }
+    }
+
     try {
       while (offset < totalBytes) {
-        const len = Math.min(step, totalBytes - offset);
+        // Com jogadores online: pedaços pequenos + pausa entre eles (evita picos que travam o jogo)
+        const limitBps = await currentLimitBps();
+        const chunkStartMs = Date.now();
+        const len = Math.min(limitBps > 0 ? throttleStep : step, totalBytes - offset);
         const buf = Buffer.allocUnsafe(len);
         const bytesRead = fs.readSync(fd, buf, 0, len, offset);
         if (bytesRead <= 0) break;
@@ -658,6 +683,10 @@ export function createGoogleDriveBackupManager({
           offset += bytesRead;
           const elapsedSec = Math.max(0.1, (Date.now() - uploadStartMs) / 1000);
           onChunkProgress?.({ uploadedBytes: offset, totalBytes, speedBps: Math.round(offset / elapsedSec) });
+          if (limitBps > 0) {
+            const waitMs = (bytesRead / limitBps) * 1000 - (Date.now() - chunkStartMs);
+            if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs));
+          }
           continue;
         }
         const errData = await putRes.json().catch(() => ({}));
@@ -680,10 +709,14 @@ export function createGoogleDriveBackupManager({
     };
   }
 
-  async function pruneRemoteBackups(maxBackupsOverride = null) {
+  async function pruneRemoteBackups(maxBackupsOverride = null, { live = false } = {}) {
     const cfg = loadConfig();
-    const limit = Math.max(1, Number(maxBackupsOverride ?? cfg.maxBackups) || 10);
-    const { files } = await listRemoteBackups();
+    const limit = live
+      ? Math.max(1, Number(cfg.liveMaxBackups) || 16)
+      : Math.max(1, Number(maxBackupsOverride ?? cfg.maxBackups) || 10);
+    const { files: all } = await listRemoteBackups();
+    // Backups ao vivo e agendados têm retenções independentes (um nunca apaga o outro)
+    const files = all.filter((f) => String(f.name).startsWith(`${LIVE_PREFIX}-`) === live);
     if (files.length <= limit) return { deleted: 0 };
 
     const toDelete = files.slice(limit);
@@ -709,7 +742,7 @@ export function createGoogleDriveBackupManager({
     return { ok: true, id: cleanId };
   }
 
-  async function syncNow({ fileName = null, createNew = false } = {}) {
+  async function syncNow({ fileName = null, createNew = false, live = false } = {}) {
     if (syncInProgress) {
       throw Object.assign(new Error('Já existe um backup/envio para o Google Drive em andamento.'), { status: 409 });
     }
@@ -720,6 +753,7 @@ export function createGoogleDriveBackupManager({
 
     syncInProgress = true;
     let tempFileToCleanup = null;
+    let worldFrozen = false;
     const startedAt = new Date().toISOString();
     setProgress({
       active: true,
@@ -744,7 +778,13 @@ export function createGoogleDriveBackupManager({
         targetPath = resolved.fullPath;
         targetName = resolved.safeName;
       } else if (createNew) {
+        // Antes de compactar: pausa a pré-geração e desliga o salvamento automático (hook do servidor)
+        if (typeof beforeBackup === 'function') {
+          worldFrozen = true;
+          await beforeBackup().catch(() => {});
+        }
         const created = await createLocalBackup({
+          prefix: live ? LIVE_PREFIX : undefined,
           onProgress: ({ fileName: fn, currentBytes, estimatedTotalBytes }) => {
             const ratio = estimatedTotalBytes > 0 ? Math.min(1, currentBytes / estimatedTotalBytes) : 0;
             const pct = Math.max(3, Math.min(28, Math.round(3 + ratio * 25)));
@@ -762,6 +802,11 @@ export function createGoogleDriveBackupManager({
         targetName = created.name;
         if (created.isTemporary) {
           tempFileToCleanup = created.fullPath;
+        }
+        // Compactou: religa o salvamento já, sem esperar o upload para o Drive
+        if (worldFrozen) {
+          worldFrozen = false;
+          await afterBackup?.().catch(() => {});
         }
       } else {
         throw Object.assign(new Error('Informe um arquivo de backup ou solicite criação de novo backup.'), {
@@ -802,7 +847,7 @@ export function createGoogleDriveBackupManager({
         totalBytes: uploaded.size,
         message: 'Aplicando retenção automática na nuvem...',
       });
-      const pruned = await pruneRemoteBackups(cfg.maxBackups);
+      const pruned = await pruneRemoteBackups(cfg.maxBackups, { live });
 
       // Atualiza cota após upload
       let quota = cfg.storageQuota;
@@ -815,7 +860,8 @@ export function createGoogleDriveBackupManager({
 
       const finishedAt = new Date().toISOString();
       const fresh = loadConfig();
-      fresh.lastBackupAt = finishedAt;
+      if (live) fresh.lastLiveBackupAt = finishedAt;
+      else fresh.lastBackupAt = finishedAt;
       fresh.lastUploadFile = uploaded.name;
       fresh.lastUploadSize = uploaded.size;
       fresh.lastUploadStatus = 'ok';
@@ -846,6 +892,7 @@ export function createGoogleDriveBackupManager({
               sizeBytes: uploaded.size,
               prunedCount: pruned.deleted,
               finishedAt,
+              live,
             })
           ).catch(() => {});
         } catch {
@@ -882,6 +929,7 @@ export function createGoogleDriveBackupManager({
               sizeBytes: 0,
               error: err.message,
               finishedAt,
+              live,
             })
           ).catch(() => {});
         } catch {
@@ -890,6 +938,10 @@ export function createGoogleDriveBackupManager({
       }
       throw err;
     } finally {
+      if (worldFrozen) {
+        worldFrozen = false;
+        await afterBackup?.().catch(() => {});
+      }
       if (tempFileToCleanup) {
         try {
           if (fs.existsSync(tempFileToCleanup)) fs.unlinkSync(tempFileToCleanup);
@@ -928,10 +980,66 @@ export function createGoogleDriveBackupManager({
     };
   }
 
+  let lastOnlineCount = 0;
+  let lastLeaveAt = 0; // último "saiu" visto
+  let handledLeaveAt = 0; // último "saiu" que já virou backup
+  let logoutTimer = null;
+
+  async function onlineCount() {
+    if (typeof getOnlinePlayerCount !== 'function') return 0;
+    try {
+      return Number(await getOnlinePlayerCount()) || 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  // Chamado pelo servidor quando um jogador desconecta
+  function notifyPlayerLeft() {
+    lastLeaveAt = Date.now();
+    if (logoutTimer) clearTimeout(logoutTimer);
+    logoutTimer = setTimeout(() => {
+      logoutTimer = null;
+      runScheduledTick().catch(() => {});
+    }, logoutDebounceMs + 1000);
+    logoutTimer.unref?.();
+  }
+
+  // Backup pós-logout: servidor vazio há logoutDebounceMs desde a última saída ainda não salva
+  async function runLogoutTick(cfg, online) {
+    if (cfg.backupAfterLogout === false) return false;
+    if (online === 0 && lastOnlineCount > 0 && lastLeaveAt <= handledLeaveAt) {
+      lastLeaveAt = Date.now(); // saída que não chegou por evento
+    }
+    lastOnlineCount = online;
+    if (online > 0 || lastLeaveAt <= handledLeaveAt) return false;
+    if (Date.now() - lastLeaveAt < logoutDebounceMs) return false;
+    handledLeaveAt = lastLeaveAt;
+    try {
+      if ((await onlineCount()) > 0) {
+        handledLeaveAt = 0; // alguém voltou: faz depois que sair de novo
+        return true;
+      }
+      console.log('[YacaCode Google Drive] Backup pós-logout (servidor vazio)...');
+      const res = await syncNow({ createNew: true, live: true });
+      console.log(`[YacaCode Google Drive] Backup pós-logout enviado: ${res.uploaded.name}`);
+    } catch (err) {
+      console.error(`[YacaCode Google Drive] Falha no backup pós-logout: ${err.message}`);
+    }
+    return true;
+  }
+
   async function runScheduledTick() {
     if (syncInProgress) return;
     const cfg = loadConfig();
     if (!cfg.enabled || !cfg.refreshToken || !cfg.clientId || !cfg.clientSecret) return;
+    const online = await onlineCount();
+    if (await runLogoutTick(cfg, online)) return;
+    // Backup agendado também espera o servidor ficar vazio, sem saída pendente de backup e
+    // sem repetir logo após um backup pós-logout
+    if (online > 0 || lastLeaveAt > handledLeaveAt) return;
+    const lastLiveMs = cfg.lastLiveBackupAt ? new Date(cfg.lastLiveBackupAt).getTime() : 0;
+    if (Date.now() - lastLiveMs < 30 * 60 * 1000) return;
     if (!cfg.scheduleHours || cfg.scheduleHours <= 0) return;
 
     const intervalMs = cfg.scheduleHours * 60 * 60 * 1000;
@@ -978,6 +1086,8 @@ export function createGoogleDriveBackupManager({
     listRemoteBackups,
     uploadFileResumable,
     pruneRemoteBackups,
+    _runScheduledTickForTest: runScheduledTick,
+    notifyPlayerLeft,
     deleteRemoteBackup,
     syncNow,
     startSyncInBackground,

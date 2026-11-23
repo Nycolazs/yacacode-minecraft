@@ -1,0 +1,637 @@
+diff --git a/crates/pumpkin-core/src/entity/mob/skeleton/bogged.rs b/crates/pumpkin-core/src/entity/mob/skeleton/bogged.rs
+index bcec85e9f..c032d24c3 100644
+--- a/crates/pumpkin-core/src/entity/mob/skeleton/bogged.rs
++++ b/crates/pumpkin-core/src/entity/mob/skeleton/bogged.rs
+@@ -142,4 +142,13 @@ impl Mob for BoggedSkeletonEntity {
+         self.entity
+             .populate_default_equipment_enchantments(difficulty);
+     }
++
++    fn finalize_spawn(
++        &self,
++        world: &Arc<World>,
++        _reason: crate::entity::mob::spawn::EntitySpawnReason,
++        group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
++    ) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
++        super::finalize_skeleton_spawn(self, world, group_data)
++    }
+ }
+diff --git a/crates/pumpkin-core/src/entity/mob/skeleton/mod.rs b/crates/pumpkin-core/src/entity/mob/skeleton/mod.rs
+index 3d650346d..a90a59819 100644
+--- a/crates/pumpkin-core/src/entity/mob/skeleton/mod.rs
++++ b/crates/pumpkin-core/src/entity/mob/skeleton/mod.rs
+@@ -93,6 +93,20 @@ impl SkeletonEntityBase {
+     }
+ }
+ 
++/// Vanilla `AbstractSkeleton.finalizeSpawn`: the bow (or the wither skeleton's sword), armor and
++/// their enchantments. Without it naturally spawned skeletons had empty hands, since the natural
++/// spawner never runs `init_data_tracker` (which only equips spawn-egg/command spawns).
++pub fn finalize_skeleton_spawn<M: Mob>(
++    mob: &M,
++    world: &Arc<World>,
++    group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
++) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
++    let difficulty = RegionalDifficulty::at(world, mob.get_entity().pos.load());
++    mob.populate_default_equipment_slots(world, &difficulty);
++    mob.populate_default_equipment_enchantments(&difficulty);
++    mob.default_finalize_spawn(world, group_data)
++}
++
+ pub fn wants_to_pick_up<M: Mob + ?Sized>(mob: &M, stack: &ItemStack) -> bool {
+     !stack
+         .item
+diff --git a/crates/pumpkin-core/src/entity/mob/skeleton/parched.rs b/crates/pumpkin-core/src/entity/mob/skeleton/parched.rs
+index 84c8cc7ef..6699bc21d 100644
+--- a/crates/pumpkin-core/src/entity/mob/skeleton/parched.rs
++++ b/crates/pumpkin-core/src/entity/mob/skeleton/parched.rs
+@@ -4,9 +4,11 @@ use pumpkin_data::sound::Sound;
+ use pumpkin_util::math::position::BlockPos;
+ use std::sync::Arc;
+ 
++use crate::world::World;
++
+ use crate::entity::{
+     Entity, EntityBase,
+-    mob::{Mob, MobEntity, skeleton::SkeletonEntityBase},
++    mob::{Mob, MobEntity, equipment::RegionalDifficulty, skeleton::SkeletonEntityBase},
+ };
+ 
+ pub struct ParchedSkeletonEntity {
+@@ -34,4 +36,27 @@ impl Mob for ParchedSkeletonEntity {
+     fn get_mob_entity(&self) -> &MobEntity {
+         &self.entity.mob_entity
+     }
++
++    fn populate_default_equipment_slots(
++        &self,
++        world: &Arc<World>,
++        difficulty: &RegionalDifficulty,
++    ) {
++        self.entity
++            .populate_default_equipment_slots(world, difficulty);
++    }
++
++    fn populate_default_equipment_enchantments(&self, difficulty: &RegionalDifficulty) {
++        self.entity
++            .populate_default_equipment_enchantments(difficulty);
++    }
++
++    fn finalize_spawn(
++        &self,
++        world: &Arc<World>,
++        _reason: crate::entity::mob::spawn::EntitySpawnReason,
++        group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
++    ) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
++        super::finalize_skeleton_spawn(self, world, group_data)
++    }
+ }
+diff --git a/crates/pumpkin-core/src/entity/mob/skeleton/skeleton.rs b/crates/pumpkin-core/src/entity/mob/skeleton/skeleton.rs
+index ce8206a8c..2a56d884d 100644
+--- a/crates/pumpkin-core/src/entity/mob/skeleton/skeleton.rs
++++ b/crates/pumpkin-core/src/entity/mob/skeleton/skeleton.rs
+@@ -48,4 +48,13 @@ impl Mob for SkeletonEntity {
+         self.entity
+             .populate_default_equipment_enchantments(difficulty);
+     }
++
++    fn finalize_spawn(
++        &self,
++        world: &Arc<World>,
++        _reason: crate::entity::mob::spawn::EntitySpawnReason,
++        group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
++    ) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
++        super::finalize_skeleton_spawn(self, world, group_data)
++    }
+ }
+diff --git a/crates/pumpkin-core/src/entity/mob/skeleton/stray.rs b/crates/pumpkin-core/src/entity/mob/skeleton/stray.rs
+index 4b3c42ffd..b5cea75f9 100644
+--- a/crates/pumpkin-core/src/entity/mob/skeleton/stray.rs
++++ b/crates/pumpkin-core/src/entity/mob/skeleton/stray.rs
+@@ -4,9 +4,11 @@ use pumpkin_data::sound::Sound;
+ use pumpkin_util::math::position::BlockPos;
+ use std::sync::Arc;
+ 
++use crate::world::World;
++
+ use crate::entity::{
+     Entity, EntityBase,
+-    mob::{Mob, MobEntity, skeleton::SkeletonEntityBase},
++    mob::{Mob, MobEntity, equipment::RegionalDifficulty, skeleton::SkeletonEntityBase},
+ };
+ 
+ pub struct StraySkeletonEntity {
+@@ -33,4 +35,27 @@ impl Mob for StraySkeletonEntity {
+     fn get_mob_entity(&self) -> &MobEntity {
+         &self.entity.mob_entity
+     }
++
++    fn populate_default_equipment_slots(
++        &self,
++        world: &Arc<World>,
++        difficulty: &RegionalDifficulty,
++    ) {
++        self.entity
++            .populate_default_equipment_slots(world, difficulty);
++    }
++
++    fn populate_default_equipment_enchantments(&self, difficulty: &RegionalDifficulty) {
++        self.entity
++            .populate_default_equipment_enchantments(difficulty);
++    }
++
++    fn finalize_spawn(
++        &self,
++        world: &Arc<World>,
++        _reason: crate::entity::mob::spawn::EntitySpawnReason,
++        group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
++    ) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
++        super::finalize_skeleton_spawn(self, world, group_data)
++    }
+ }
+diff --git a/crates/pumpkin-core/src/entity/mob/skeleton/wither.rs b/crates/pumpkin-core/src/entity/mob/skeleton/wither.rs
+index ff73f5039..7215ebdc2 100644
+--- a/crates/pumpkin-core/src/entity/mob/skeleton/wither.rs
++++ b/crates/pumpkin-core/src/entity/mob/skeleton/wither.rs
+@@ -2,6 +2,8 @@ use pumpkin_data::item_stack::ItemStack;
+ use pumpkin_data::tag::Taggable;
+ use std::sync::Arc;
+ 
++use crate::world::World;
++
+ use pumpkin_data::BlockState;
+ use pumpkin_data::effect::StatusEffect;
+ use pumpkin_data::potion::Effect;
+@@ -12,7 +14,7 @@ use crate::entity::{
+     Entity, EntityBase,
+     ai::behavior::hunting::Hunt,
+     ai::target_match::TargetMatch,
+-    mob::{Mob, MobEntity, skeleton::SkeletonEntityBase},
++    mob::{Mob, MobEntity, equipment::RegionalDifficulty, skeleton::SkeletonEntityBase},
+     projectile::arrow::ArrowEntity,
+ };
+ 
+@@ -49,6 +51,30 @@ impl Mob for WitherSkeletonEntity {
+         &self.entity.mob_entity
+     }
+ 
++    // Vanilla `WitherSkeleton.populateDefaultEquipmentSlots`: always a stone sword, no armor.
++    fn populate_default_equipment_slots(
++        &self,
++        _world: &Arc<World>,
++        _difficulty: &RegionalDifficulty,
++    ) {
++        let _ = self.entity.mob_entity.set_item_slot(
++            &pumpkin_data::data_component_impl::EquipmentSlot::MAIN_HAND,
++            ItemStack::new(1, &pumpkin_data::item::Item::STONE_SWORD),
++        );
++    }
++
++    // Vanilla `WitherSkeleton.populateDefaultEquipmentEnchantments` does nothing.
++    fn populate_default_equipment_enchantments(&self, _difficulty: &RegionalDifficulty) {}
++
++    fn finalize_spawn(
++        &self,
++        world: &Arc<World>,
++        _reason: crate::entity::mob::spawn::EntitySpawnReason,
++        group_data: Option<crate::entity::mob::spawn::SpawnGroupData>,
++    ) -> Option<crate::entity::mob::spawn::SpawnGroupData> {
++        super::finalize_skeleton_spawn(self, world, group_data)
++    }
++
+     fn on_attack(&self, target: &dyn EntityBase) {
+         if let Some(living) = target.get_living_entity() {
+             living.add_effect(Effect {
+diff --git a/crates/pumpkin-core/src/lib.rs b/crates/pumpkin-core/src/lib.rs
+index 3baeab045..9e53b5da7 100644
+--- a/crates/pumpkin-core/src/lib.rs
++++ b/crates/pumpkin-core/src/lib.rs
+@@ -65,6 +65,7 @@ pub mod server;
+ pub mod telemetry;
+ pub mod update_checker;
+ pub mod world;
++pub mod yaca_auth;
+ 
+ pub struct LoggingConfig {
+     pub color: bool,
+diff --git a/crates/pumpkin-core/src/net/bedrock/play/chat_command.rs b/crates/pumpkin-core/src/net/bedrock/play/chat_command.rs
+index d31683b7b..dbe16d03a 100644
+--- a/crates/pumpkin-core/src/net/bedrock/play/chat_command.rs
++++ b/crates/pumpkin-core/src/net/bedrock/play/chat_command.rs
+@@ -13,6 +13,9 @@ impl BedrockClient {
+             return;
+         }
+         let command = packet.command.strip_prefix('/').unwrap_or(&packet.command);
++        if crate::yaca_auth::intercept_command(player, command) {
++            return;
++        }
+ 
+         send_cancellable! {{
+             server;
+diff --git a/crates/pumpkin-core/src/net/java/play/chat_command.rs b/crates/pumpkin-core/src/net/java/play/chat_command.rs
+index 5b3c0f8a0..79f07cf59 100644
+--- a/crates/pumpkin-core/src/net/java/play/chat_command.rs
++++ b/crates/pumpkin-core/src/net/java/play/chat_command.rs
+@@ -15,6 +15,9 @@ impl JavaClient {
+         // Keep a leading slash: a client typing `//wand` (WorldEdit style) sends `/wand`, and the
+         // dispatcher decides itself whether that slash belongs to the command name or is a prefix.
+         let command_str = command.command;
++        if crate::yaca_auth::intercept_command(player, command_str) {
++            return;
++        }
+         send_cancellable! {{
+             server;
+             PlayerCommandSendEvent {
+diff --git a/crates/pumpkin-core/src/server/mod.rs b/crates/pumpkin-core/src/server/mod.rs
+index 82dc1fb5a..a91269707 100644
+--- a/crates/pumpkin-core/src/server/mod.rs
++++ b/crates/pumpkin-core/src/server/mod.rs
+@@ -477,6 +477,7 @@ impl Server {
+         }
+ 
+         server.worlds.store(Arc::new(worlds_vec));
++        crate::yaca_auth::register(&server);
+ 
+         info!("All worlds loaded successfully.");
+ 
+diff --git a/crates/pumpkin-core/src/yaca_auth.rs b/crates/pumpkin-core/src/yaca_auth.rs
+new file mode 100644
+index 000000000..ccddf823b
+--- /dev/null
++++ b/crates/pumpkin-core/src/yaca_auth.rs
+@@ -0,0 +1,375 @@
++//! YacaCode: login com senha para servidor em modo offline (Java via Velocity e Bedrock).
++//!
++//! Quem entra fica "congelado" (não anda, não quebra/coloca bloco, não interage, não abre nem
++//! mexe no inventário, não solta/pega item, não leva nem causa dano, não fala no chat e só pode
++//! usar /login ou /register) até digitar a senha da conta. A conta é o nick sem o prefixo "."
++//! do Bedrock, então Java e Bedrock compartilham a mesma senha. As senhas ficam em
++//! `yacacode-auth.json` (PBKDF2-HMAC-SHA256) no diretório do servidor; apagar a entrada de um
++//! jogador nesse arquivo libera um novo /register (o arquivo é relido a cada tentativa).
++//! Os comandos de login nunca vão para o log.
++
++use std::collections::HashMap;
++use std::sync::{Arc, LazyLock, Mutex};
++use std::time::{Duration, Instant};
++
++use hmac::{Hmac, KeyInit, Mac};
++use pumpkin_util::text::{TextComponent, color::NamedColor};
++use sha2::Sha256;
++use uuid::Uuid;
++
++use crate::entity::player::Player;
++use crate::net::DisconnectReason;
++use crate::plugin::api::events::block::{block_break::BlockBreakEvent, block_place::BlockPlaceEvent};
++use crate::plugin::api::events::entity::{
++    entity_damage::EntityDamageEvent, entity_damage_by_entity::EntityDamageByEntityEvent,
++    entity_pickup_item::EntityPickupItemEvent,
++};
++use crate::plugin::api::events::player::{
++    inventory_interact::InventoryClickEvent, player_chat::PlayerChatEvent,
++    player_drop_item::PlayerDropItemEvent, player_interact_entity_event::PlayerInteractEntityEvent,
++    player_interact_event::PlayerInteractEvent, player_item_consume::PlayerItemConsumeEvent,
++    player_join::PlayerJoinEvent, player_leave::PlayerLeaveEvent, player_move::PlayerMoveEvent,
++};
++use crate::plugin::api::events::{Cancellable, EventPriority, Payload};
++use crate::plugin::{BoxFuture, EventHandler};
++use crate::server::Server;
++
++const AUTH_FILE: &str = "yacacode-auth.json";
++const PBKDF2_ITERATIONS: u32 = 120_000;
++const LOGIN_TIMEOUT: Duration = Duration::from_secs(120);
++const MAX_ATTEMPTS: u32 = 3;
++const MIN_PASSWORD_LEN: usize = 6;
++
++struct Pending {
++    entity_id: i32,
++    attempts: u32,
++}
++
++/// Jogadores online que ainda não fizeram login (UUID -> estado).
++static PENDING: LazyLock<Mutex<HashMap<Uuid, Pending>>> = LazyLock::new(Default::default);
++static FILE_LOCK: Mutex<()> = Mutex::new(());
++
++fn pending() -> std::sync::MutexGuard<'static, HashMap<Uuid, Pending>> {
++    PENDING.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
++}
++
++#[must_use]
++pub fn is_pending(player: &Player) -> bool {
++    pending().contains_key(&player.gameprofile.id)
++}
++
++fn is_pending_entity(entity_id: i32) -> bool {
++    pending().values().any(|p| p.entity_id == entity_id)
++}
++
++#[must_use]
++pub fn account_key(name: &str) -> String {
++    name.trim().trim_start_matches('.').to_lowercase()
++}
++
++fn hex(bytes: &[u8]) -> String {
++    use std::fmt::Write;
++    bytes.iter().fold(String::new(), |mut s, b| {
++        let _ = write!(s, "{b:02x}");
++        s
++    })
++}
++
++fn pbkdf2(password: &[u8], salt: &[u8], iterations: u32) -> [u8; 32] {
++    let prf = <Hmac<Sha256> as KeyInit>::new_from_slice(password).expect("HMAC aceita qualquer chave");
++    let mut u = {
++        let mut m = prf.clone();
++        m.update(salt);
++        m.update(&1u32.to_be_bytes());
++        let out: [u8; 32] = m.finalize().into_bytes().into();
++        out
++    };
++    let mut acc = u;
++    for _ in 1..iterations {
++        let mut m = prf.clone();
++        m.update(&u);
++        u = m.finalize().into_bytes().into();
++        for (a, b) in acc.iter_mut().zip(u.iter()) {
++            *a ^= b;
++        }
++    }
++    acc
++}
++
++fn load_accounts() -> serde_json::Map<String, serde_json::Value> {
++    std::fs::read_to_string(AUTH_FILE)
++        .ok()
++        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
++        .and_then(|v| v.get("accounts").and_then(|a| a.as_object().cloned()))
++        .unwrap_or_default()
++}
++
++fn save_accounts(accounts: serde_json::Map<String, serde_json::Value>) -> std::io::Result<()> {
++    let body = serde_json::to_string_pretty(&serde_json::json!({ "accounts": accounts }))
++        .map_err(std::io::Error::other)?;
++    let tmp = format!("{AUTH_FILE}.tmp");
++    std::fs::write(&tmp, body)?;
++    #[cfg(unix)]
++    {
++        use std::os::unix::fs::PermissionsExt;
++        let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600));
++    }
++    std::fs::rename(tmp, AUTH_FILE)
++}
++
++fn check_password(entry: &serde_json::Value, password: &str) -> bool {
++    let (Some(salt), Some(hash)) = (entry.get("salt").and_then(|v| v.as_str()), entry.get("hash").and_then(|v| v.as_str())) else {
++        return false;
++    };
++    let iterations = entry.get("iterations").and_then(serde_json::Value::as_u64).unwrap_or(u64::from(PBKDF2_ITERATIONS)) as u32;
++    let Some(salt) = (0..salt.len()).step_by(2).map(|i| u8::from_str_radix(salt.get(i..i + 2)?, 16).ok()).collect::<Option<Vec<u8>>>() else {
++        return false;
++    };
++    let computed = hex(&pbkdf2(password.as_bytes(), &salt, iterations));
++    // comparação em tempo constante
++    computed.len() == hash.len() && computed.bytes().zip(hash.bytes()).fold(0u8, |d, (a, b)| d | (a ^ b)) == 0
++}
++
++fn new_entry(password: &str) -> serde_json::Value {
++    let salt: [u8; 16] = rand::random();
++    serde_json::json!({
++        "salt": hex(&salt),
++        "hash": hex(&pbkdf2(password.as_bytes(), &salt, PBKDF2_ITERATIONS)),
++        "iterations": PBKDF2_ITERATIONS,
++    })
++}
++
++fn msg(player: &Player, text: &str, color: NamedColor) {
++    player.send_system_message(&TextComponent::text(text.to_string()).color_named(color));
++}
++
++fn prompt(player: &Player) {
++    if load_accounts().contains_key(&account_key(&player.gameprofile.name)) {
++        msg(player, "Esta conta tem senha. Digite /login <senha> para jogar.", NamedColor::Yellow);
++    } else {
++        msg(player, "Proteja sua conta: digite /register <senha> <senha> (mínimo 6 caracteres).", NamedColor::Yellow);
++    }
++}
++
++fn finish_login(player: &Player, text: &str) {
++    pending().remove(&player.gameprofile.id);
++    msg(player, text, NamedColor::Green);
++    tracing::info!("[YacaAuth] {} autenticado.", player.gameprofile.name);
++}
++
++/// Intercepta comandos de chat. Retorna `true` se o comando foi tratado aqui (e NÃO deve ir
++/// para o dispatcher nem para o log).
++pub fn intercept_command(player: &Arc<Player>, command: &str) -> bool {
++    let command = command.trim_start_matches('/');
++    let mut parts = command.split_whitespace();
++    let name = parts.next().unwrap_or("").to_lowercase();
++    let args: Vec<&str> = parts.collect();
++    let key = account_key(&player.gameprofile.name);
++
++    match name.as_str() {
++        "login" | "l" | "logar" => {
++            if !is_pending(player) {
++                msg(player, "Você já está logado.", NamedColor::Gray);
++                return true;
++            }
++            let accounts = load_accounts();
++            let Some(entry) = accounts.get(&key) else {
++                msg(player, "Esta conta ainda não tem senha. Use /register <senha> <senha>.", NamedColor::Red);
++                return true;
++            };
++            if args.len() == 1 && check_password(entry, args[0]) {
++                finish_login(player, "Login feito. Bom jogo!");
++            } else {
++                let attempts = {
++                    let mut p = pending();
++                    let e = p.get_mut(&player.gameprofile.id);
++                    e.map_or(MAX_ATTEMPTS, |e| {
++                        e.attempts += 1;
++                        e.attempts
++                    })
++                };
++                tracing::warn!("[YacaAuth] Senha incorreta para {} ({attempts}/{MAX_ATTEMPTS}).", player.gameprofile.name);
++                if attempts >= MAX_ATTEMPTS {
++                    player.kick(DisconnectReason::Kicked, &TextComponent::text("Senha incorreta."));
++                } else {
++                    msg(player, "Senha incorreta.", NamedColor::Red);
++                }
++            }
++            true
++        }
++        "register" | "reg" | "registrar" => {
++            if !is_pending(player) {
++                msg(player, "Você já está logado. Para trocar a senha use /changepassword <atual> <nova>.", NamedColor::Gray);
++                return true;
++            }
++            let _guard = FILE_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
++            let mut accounts = load_accounts();
++            if accounts.contains_key(&key) {
++                msg(player, "Esta conta já tem senha. Use /login <senha>.", NamedColor::Red);
++                return true;
++            }
++            if args.len() != 2 || args[0] != args[1] {
++                msg(player, "Use: /register <senha> <senha> (as duas iguais).", NamedColor::Red);
++                return true;
++            }
++            if args[0].chars().count() < MIN_PASSWORD_LEN {
++                msg(player, "A senha precisa ter pelo menos 6 caracteres.", NamedColor::Red);
++                return true;
++            }
++            accounts.insert(key, new_entry(args[0]));
++            if let Err(e) = save_accounts(accounts) {
++                tracing::error!("[YacaAuth] Falha ao salvar {AUTH_FILE}: {e}");
++                msg(player, "Erro ao salvar a senha. Avise o administrador.", NamedColor::Red);
++                return true;
++            }
++            tracing::info!("[YacaAuth] Conta {} registrada.", player.gameprofile.name);
++            finish_login(player, "Senha criada! Na próxima vez entre com /login <senha>.");
++            true
++        }
++        "changepassword" | "trocarsenha" => {
++            if is_pending(player) {
++                msg(player, "Faça /login primeiro.", NamedColor::Red);
++                return true;
++            }
++            let _guard = FILE_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
++            let mut accounts = load_accounts();
++            let ok = args.len() == 2 && accounts.get(&key).is_some_and(|e| check_password(e, args[0]));
++            if !ok {
++                msg(player, "Use: /changepassword <senha atual> <nova senha>.", NamedColor::Red);
++                return true;
++            }
++            if args[1].chars().count() < MIN_PASSWORD_LEN {
++                msg(player, "A nova senha precisa ter pelo menos 6 caracteres.", NamedColor::Red);
++                return true;
++            }
++            accounts.insert(key, new_entry(args[1]));
++            if save_accounts(accounts).is_ok() {
++                msg(player, "Senha alterada.", NamedColor::Green);
++            }
++            true
++        }
++        _ => {
++            if is_pending(player) {
++                prompt(player);
++                return true;
++            }
++            false
++        }
++    }
++}
++
++struct Gate;
++
++macro_rules! cancel_if {
++    ($event:ty, |$e:ident| $cond:expr) => {
++        impl EventHandler<$event> for Gate {
++            fn handle_blocking<'a>(&'a self, _server: &'a Arc<Server>, $e: &'a mut $event) -> BoxFuture<'a, ()> {
++                Box::pin(async move {
++                    if $cond {
++                        $e.set_cancelled(true);
++                    }
++                })
++            }
++        }
++    };
++}
++
++cancel_if!(PlayerMoveEvent, |e| is_pending(&e.player));
++cancel_if!(BlockPlaceEvent, |e| is_pending(&e.player));
++cancel_if!(BlockBreakEvent, |e| e.player.as_ref().is_some_and(|p| is_pending(p)));
++cancel_if!(PlayerInteractEvent, |e| is_pending(&e.player));
++cancel_if!(PlayerInteractEntityEvent, |e| is_pending(&e.player));
++cancel_if!(PlayerDropItemEvent, |e| is_pending(&e.player));
++cancel_if!(InventoryClickEvent, |e| is_pending(&e.player));
++cancel_if!(PlayerItemConsumeEvent, |e| is_pending(&e.player));
++cancel_if!(PlayerChatEvent, |e| is_pending(&e.player));
++cancel_if!(EntityDamageEvent, |e| is_pending_entity(e.entity_id));
++cancel_if!(EntityDamageByEntityEvent, |e| is_pending_entity(e.entity_id) || is_pending_entity(e.damager_id));
++cancel_if!(EntityPickupItemEvent, |e| is_pending_entity(e.entity_id));
++
++impl EventHandler<PlayerJoinEvent> for Gate {
++    fn handle_blocking<'a>(&'a self, server: &'a Arc<Server>, e: &'a mut PlayerJoinEvent) -> BoxFuture<'a, ()> {
++        Box::pin(async move {
++            let player = e.player.clone();
++            let id = player.gameprofile.id;
++            pending().insert(id, Pending { entity_id: player.entity_id(), attempts: 0 });
++            server.runtime.spawn(async move {
++                let started = Instant::now();
++                while started.elapsed() < LOGIN_TIMEOUT {
++                    tokio::time::sleep(Duration::from_secs(1)).await;
++                    if !pending().contains_key(&id) {
++                        return;
++                    }
++                    if started.elapsed().as_secs() % 10 == 1 {
++                        prompt(&player);
++                    }
++                }
++                if pending().contains_key(&id) {
++                    player.kick(DisconnectReason::Kicked, &TextComponent::text("Tempo para login esgotado."));
++                }
++            });
++        })
++    }
++}
++
++impl EventHandler<PlayerLeaveEvent> for Gate {
++    fn handle_blocking<'a>(&'a self, _server: &'a Arc<Server>, e: &'a mut PlayerLeaveEvent) -> BoxFuture<'a, ()> {
++        Box::pin(async move {
++            pending().remove(&e.player.gameprofile.id);
++        })
++    }
++}
++
++fn reg<E: Payload + Send + Sync + 'static>(server: &Server, gate: &Arc<Gate>)
++where
++    Gate: EventHandler<E>,
++{
++    server.plugin_manager.register::<E, Gate>(gate.clone(), EventPriority::Highest, true);
++}
++
++pub fn register(server: &Server) {
++    let gate = Arc::new(Gate);
++    reg::<PlayerJoinEvent>(server, &gate);
++    reg::<PlayerLeaveEvent>(server, &gate);
++    reg::<PlayerMoveEvent>(server, &gate);
++    reg::<BlockPlaceEvent>(server, &gate);
++    reg::<BlockBreakEvent>(server, &gate);
++    reg::<PlayerInteractEvent>(server, &gate);
++    reg::<PlayerInteractEntityEvent>(server, &gate);
++    reg::<PlayerDropItemEvent>(server, &gate);
++    reg::<InventoryClickEvent>(server, &gate);
++    reg::<PlayerItemConsumeEvent>(server, &gate);
++    reg::<PlayerChatEvent>(server, &gate);
++    reg::<EntityDamageEvent>(server, &gate);
++    reg::<EntityDamageByEntityEvent>(server, &gate);
++    reg::<EntityPickupItemEvent>(server, &gate);
++    tracing::info!("[YacaAuth] Login com senha ativo ({AUTH_FILE}).");
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn pbkdf2_rfc7914_vector() {
++        // RFC 7914 §11: PBKDF2-HMAC-SHA256(P="passwd", S="salt", c=1, dkLen=64) — primeiros 32 bytes
++        assert_eq!(
++            hex(&pbkdf2(b"passwd", b"salt", 1)),
++            "55ac046e56e3089fec1691c22544b605f94185216dde0465e68b9d57c20dacbc"
++        );
++        // c=80000, P="Password", S="NaCl"
++        assert_eq!(
++            hex(&pbkdf2(b"Password", b"NaCl", 80000)),
++            "4ddcd8f60b98be21830cee5ef22701f9641a4418d04c0414aeff08876b34ab56"
++        );
++    }
++
++    #[test]
++    fn entry_roundtrip_and_account_key() {
++        let e = new_entry("segredo123");
++        assert!(check_password(&e, "segredo123"));
++        assert!(!check_password(&e, "segredo124"));
++        assert_eq!(account_key(".Nycolazs"), "nycolazs");
++        assert_eq!(account_key("Nycolazs"), "nycolazs");
++    }
++}
