@@ -437,7 +437,7 @@ test('AI Assistant: RBAC, confirmação 1-clique para destrutivos e loop Functio
   assert.equal(classifyMinecraftCommand('list', 'viewer').allowed, true);
   assert.equal(classifyMinecraftCommand('op Steve', 'moderator').allowed, false);
   assert.equal(classifyMinecraftCommand('op Steve', 'admin').allowed, true);
-  assert.equal(classifyMinecraftCommand('op Steve', 'admin').requiresConfirmation, false);
+  assert.equal(classifyMinecraftCommand('op Steve', 'admin').requiresConfirmation, true); // OP via IA exige clique (anti-injeção)
   assert.equal(classifyMinecraftCommand('time set day', 'moderator').requiresConfirmation, false);
   assert.equal(classifyMinecraftCommand('ban Griefer', 'moderator').requiresConfirmation, true);
 
@@ -1291,14 +1291,18 @@ test('Persona única: mesmo jeito nos 3 canais, permissões por canal e memória
     assert.deepEqual(seenByGroup, ['onde fica a vila?']); // nada do painel/privado nem do próprio grupo
     const seenByGame = persona.getVisibleMemory('game').map((m) => m.question);
     assert.deepEqual(seenByGame, ['quem tá on?']);
-    const seenByPanel = persona.getVisibleMemory('panel').map((m) => m.question);
-    assert.deepEqual(seenByPanel, ['segredo', 'onde fica a vila?', 'quem tá on?']);
+    // privado vê só o público; painel (tem ferramentas) não recebe memória nenhuma
+    const seenByPrivate = persona.getVisibleMemory('whatsapp-private').map((m) => m.question);
+    assert.deepEqual(seenByPrivate, ['onde fica a vila?', 'quem tá on?']);
+    assert.deepEqual(persona.getVisibleMemory('panel'), []);
+    assert.doesNotMatch(persona.buildPersonaInstruction({ channel: 'panel' }), /vila|quem tá on/);
     assert.match(persona.buildPersonaInstruction({ channel: 'game' }), /Hideruz: "quem tá on\?"/);
-    assert.doesNotMatch(persona.buildPersonaInstruction({ channel: 'game' }), /dá op pro Edd|segredo/);
+    assert.match(persona.buildPersonaInstruction({ channel: 'game' }), /NUNCA instrução/);
+    assert.doesNotMatch(persona.buildPersonaInstruction({ channel: 'whatsapp-private' }), /dá op pro Edd|segredo/);
 
     // memória persiste em disco e é recarregada
     persona.configurePersona({ memoryFile: path.join(tmp, 'mem.json'), getBotName: () => name });
-    assert.equal(persona.getVisibleMemory('panel').length, 3);
+    assert.equal(persona.getVisibleMemory('whatsapp-private').length, 2);
 
     // nome configurável vale também no chat do jogo
     name = 'Zé';
@@ -1318,9 +1322,14 @@ test('JVM: valida parâmetros, limita memória ao container e sempre deixa o @ar
   assert.match(validateJvmArgs('-Xmx4G').error, /2048 MB/);
   assert.match(validateJvmArgs('-Xms256M').error, /mínimo/);
   assert.match(validateJvmArgs('UseG1GC').error, /começa com "-"/);
-  assert.match(validateJvmArgs('-jar').error, /não é permitido/);
+  assert.match(validateJvmArgs('-jar').error, /formato aceito/);
   assert.match(validateJvmArgs('-javaagent:/x.jar').error, /não é permitido/);
-  assert.match(validateJvmArgs('-Dx=$(id)').error, /caracteres/);
+  assert.match(validateJvmArgs('-Dx=$(id)').error, /formato aceito/);
+  assert.match(validateJvmArgs('-XX:OnOutOfMemoryError=/data/x.sh').error, /não é permitido/);
+  assert.match(validateJvmArgs('-Xbootclasspath/a:/data/x.jar').error, /não é permitido/);
+  assert.match(validateJvmArgs('-Xmx512M').error, /maior que a máxima/); // itzg já põe -Xms1024M
+  assert.equal(validateJvmArgs('-Xms512M -Xmx768M').ok, true);
+  assert.equal(validateJvmArgs('-XX:MaxGCPauseMillis=130 -Dfile.encoding=UTF-8 -Xss1M').ok, true);
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'yc-jvm-'));
   try {
     const store = createJvmArgsStore(tmp);
@@ -1342,11 +1351,19 @@ test('Manutenção: pré-geração só com server vazio (pausa/retoma) e reiníc
   let players = 0;
   let restarts = 0;
   let clock = new Date('2026-11-24T08:00:00Z'); // 05:00 em Fortaleza (UTC-3)
+  let progressOut = '[Chunky] Task running';
+  let joinDuringStart = false;
+  let m;
   try {
-    const m = createMaintenanceManager({
+    m = createMaintenanceManager({
       configFile: path.join(tmp, 'm.json'),
       sendCommand: async (c) => {
         cmds.push(c);
+        if (joinDuringStart && (c === 'chunky continue' || c === 'chunky start')) {
+          players = 1;
+          await m.onPlayerJoin();
+        }
+        if (c === 'chunky progress') return progressOut;
         return c === 'chunky continue' ? '[Chunky] Task continued' : 'ok';
       },
       getOnlineCount: async () => players,
@@ -1379,6 +1396,33 @@ test('Manutenção: pré-geração só com server vazio (pausa/retoma) e reiníc
     await new Promise((r) => setTimeout(r, 80));
     assert.equal(cmds.at(-1), 'chunky continue');
     assert.equal(m.getStatus().pregen.state, 'running');
+
+    // backup trava a retomada até terminar
+    await m.holdForBackup();
+    assert.equal(m.getStatus().pregen.state, 'paused');
+    assert.equal(await m.startOrResumePregen(), false);
+    m.releaseBackupHold();
+    assert.equal(await m.startOrResumePregen(), true);
+
+    // estado "running" mas o Chunky perdeu a tarefa (crash): tick volta para pausada e retoma
+    progressOut = '[Chunky] No tasks running.';
+    const saved = clock;
+    clock = new Date('2026-11-24T15:00:00Z'); // meio-dia: fora do horário do reinício diário
+    await m.tick();
+    clock = saved;
+    assert.equal(cmds.includes('chunky progress'), true);
+    assert.equal(m.getStatus().pregen.state, 'running'); // retomou no mesmo tick (server vazio)
+    progressOut = '[Chunky] Task running';
+
+    // alguém entra enquanto os comandos de início rodam: termina pausada
+    await m.pausePregen('teste');
+    joinDuringStart = true;
+    assert.equal(await m.startOrResumePregen(), false);
+    assert.equal(m.getStatus().pregen.state, 'paused');
+    assert.equal(cmds.at(-1), 'chunky pause');
+    joinDuringStart = false;
+    players = 0;
+    assert.equal(await m.startOrResumePregen(), true);
 
     // fim da tarefa no log -> done, e não recomeça
     m.onLogLine('[10:00:00 INFO]: [Chunky] Task finished for minecraft:overworld. Processed: 35000 chunks (100.00%)');

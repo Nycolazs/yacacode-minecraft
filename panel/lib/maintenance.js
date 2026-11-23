@@ -16,7 +16,7 @@ const DEFAULTS = {
     centerX: 0,
     centerZ: 0,
     radius: 1500,
-    state: 'idle', // idle | running | paused | done
+    state: 'idle', // idle | starting | running | paused | done
     startedAt: null,
     finishedAt: null,
   },
@@ -43,6 +43,7 @@ export function createMaintenanceManager({
 }) {
   let resumeTimer = null;
   let tickTimer = null;
+  let backupHoldUntil = 0; // enquanto houver backup compactando, a pré-geração não retoma
 
   function load() {
     let raw = {};
@@ -84,11 +85,17 @@ export function createMaintenanceManager({
 
   async function startOrResumePregen() {
     const cfg = load();
-    if (!cfg.pregen.enabled || cfg.pregen.state === 'done' || cfg.pregen.state === 'running') return false;
+    if (!cfg.pregen.enabled || ['done', 'running', 'starting'].includes(cfg.pregen.state)) return false;
+    if (Date.now() < backupHoldUntil) return false;
     if ((await online()) > 0) return false;
     const p = cfg.pregen;
+    const previousState = p.state;
+    // "starting" já conta como ativo: se alguém entrar no meio dos comandos, o join pausa
+    update((c) => {
+      c.pregen.state = 'starting';
+    });
     let out;
-    if (p.state === 'paused') {
+    if (previousState === 'paused') {
       out = await chunky('continue');
       if (/no tasks|nenhuma/i.test(out)) out = null; // tarefa perdida: recomeça (chunks prontos são pulados)
     }
@@ -98,17 +105,29 @@ export function createMaintenanceManager({
       await chunky(`radius ${p.radius}`);
       out = await chunky('start');
     }
+    if (load().pregen.state !== 'starting') {
+      // alguém entrou enquanto os comandos rodavam: o join já mudou o estado para "paused"
+      await chunky('pause').catch(() => '');
+      return false;
+    }
     update((c) => {
       c.pregen.state = 'running';
       c.pregen.startedAt = c.pregen.startedAt || now().toISOString();
     });
-    log(`pré-geração ${p.state === 'paused' ? 'retomada' : 'iniciada'} (raio ${p.radius} blocos)`);
+    if ((await online()) > 0) {
+      await pausePregen('jogador entrou durante o início');
+      return false;
+    }
+    log(`pré-geração ${previousState === 'paused' ? 'retomada' : 'iniciada'} (raio ${p.radius} blocos)`);
     return true;
   }
 
   async function pausePregen(reason) {
     const cfg = load();
-    if (cfg.pregen.state !== 'running') return false;
+    if (!['running', 'starting'].includes(cfg.pregen.state)) return false;
+    update((c) => {
+      c.pregen.state = 'paused';
+    });
     await chunky('pause').catch(() => '');
     update((c) => {
       c.pregen.state = 'paused';
@@ -131,12 +150,15 @@ export function createMaintenanceManager({
     }
   }
 
-  function onPlayerJoin() {
+  async function onPlayerJoin() {
     if (resumeTimer) {
       clearTimeout(resumeTimer);
       resumeTimer = null;
     }
-    return pausePregen('jogador entrou');
+    if (await pausePregen('jogador entrou')) return true;
+    // estado pode estar desatualizado (ex.: painel reiniciou): pausar é inofensivo se não houver tarefa
+    if (load().pregen.enabled && load().pregen.state !== 'done') await chunky('pause').catch(() => '');
+    return false;
   }
 
   function onPlayerLeave() {
@@ -183,6 +205,16 @@ export function createMaintenanceManager({
 
   async function tick() {
     await maybeDailyRestart().catch((err) => log(`erro no reinício diário: ${err.message}`));
+    // "rodando" no arquivo mas o Chunky não tem tarefa (crash, reinício fora do diário): volta para pausada
+    if (load().pregen.state === 'running') {
+      const out = await chunky('progress').catch(() => null);
+      if (out !== null && /no tasks running|nenhuma tarefa/i.test(out)) {
+        update((c) => {
+          c.pregen.state = 'paused';
+        });
+        log('pré-geração estava parada no Chunky; será retomada');
+      }
+    }
     // retoma depois de reinícios/boot (o painel pode ter reiniciado junto)
     const cfg = load();
     if (cfg.pregen.enabled && cfg.pregen.state !== 'done' && cfg.pregen.state !== 'running' && !resumeTimer) {
@@ -201,6 +233,15 @@ export function createMaintenanceManager({
     if (resumeTimer) clearTimeout(resumeTimer);
     tickTimer = null;
     resumeTimer = null;
+  }
+
+  async function holdForBackup() {
+    backupHoldUntil = Date.now() + 30 * 60 * 1000; // trava de segurança: libera sozinha em 30 min
+    return pausePregen('backup');
+  }
+
+  function releaseBackupHold() {
+    backupHoldUntil = 0;
   }
 
   function configurePregen(patch = {}) {
@@ -225,6 +266,8 @@ export function createMaintenanceManager({
     onPlayerLeave,
     startOrResumePregen,
     pausePregen,
+    holdForBackup,
+    releaseBackupHold,
     maybeDailyRestart,
     configurePregen,
     getStatus: () => load(),

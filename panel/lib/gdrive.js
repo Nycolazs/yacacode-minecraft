@@ -72,6 +72,7 @@ export function createGoogleDriveBackupManager({
   onBackupFinished = null,
   getOnlinePlayerCount = null,
   beforeBackup = null,
+  afterBackup = null,
   logoutDebounceMs = 60 * 1000,
   chunkSizeBytes = UPLOAD_CHUNK_BYTES,
 }) {
@@ -1010,6 +1011,8 @@ export function createGoogleDriveBackupManager({
       console.log(`[YacaCode Google Drive] Backup pós-logout enviado: ${res.uploaded.name}`);
     } catch (err) {
       console.error(`[YacaCode Google Drive] Falha no backup pós-logout: ${err.message}`);
+    } finally {
+      if (typeof afterBackup === 'function') await afterBackup().catch(() => {});
     }
     return true;
   }
@@ -1040,11 +1043,14 @@ export function createGoogleDriveBackupManager({
     }
 
     try {
+      if (typeof beforeBackup === 'function') await beforeBackup();
       console.log('[YacaCode Google Drive] Iniciando backup agendado para o Google Drive...');
       const res = await syncNow({ createNew: true });
       console.log(`[YacaCode Google Drive] Backup enviado: ${res.uploaded.name} (${res.uploaded.size} bytes)`);
     } catch (err) {
       console.error(`[YacaCode Google Drive] Falha no backup agendado: ${err.message}`);
+    } finally {
+      if (typeof afterBackup === 'function') await afterBackup().catch(() => {});
     }
   }
 

@@ -24,6 +24,8 @@ services:
   minecraft:
     image: itzg/minecraft-server:java25
     container_name: yacacode-mc
+    # Valida os parâmetros extras da JVM antes do start do itzg (cria o arquivo se faltar)
+    entrypoint: ["/bin/sh", "/yacacode/jvm-guard.sh"]
     restart: unless-stopped
     tty: false
     stdin_open: true
@@ -72,6 +74,7 @@ services:
     volumes:
       - ./minecraft/data:/data
       - ./minecraft/server-icon.png:/assets/server-icon.png:ro
+      - ./minecraft/jvm-guard.sh:/yacacode/jvm-guard.sh:ro
     networks:
       - yacacode-net
     logging: *default-logging

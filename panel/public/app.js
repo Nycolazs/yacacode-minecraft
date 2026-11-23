@@ -3307,7 +3307,11 @@ async function loadJvmArgs() {
   try {
     const data = await api('/api/config/jvm');
     $('#jvm-args').value = data.args || '';
-    $('#jvm-status').textContent = data.args ? '' : 'Nenhum parâmetro extra (usando os padrões do server).';
+    $('#jvm-status').textContent = data.rejected
+      ? `O Java recusou estes parâmetros no último início e o server subiu com os padrões: ${data.rejected.replace(/\s+/g, ' ')}`
+      : data.args
+      ? ''
+      : 'Nenhum parâmetro extra (usando os padrões do server).';
   } catch (err) {
     $('#jvm-status').textContent = `Não foi possível ler: ${err.message}`;
   }

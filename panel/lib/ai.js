@@ -50,6 +50,12 @@ const DESTRUCTIVE_CMD_ROOTS = new Set([
   'kill',
   'stop',
   'fill',
+  'op',
+  'deop',
+  'whitelist',
+  'gamemode',
+  'pardon',
+  'pardon-ip',
 ]);
 
 // Comandos de consulta pura (somente leitura) — permitidos até para viewer se precisar

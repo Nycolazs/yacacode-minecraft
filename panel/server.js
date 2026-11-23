@@ -92,9 +92,17 @@ const gdrive = createGoogleDriveBackupManager({
     files.createWorldBackupArchive({ destDir: os.tmpdir(), maxLocalBackups: 0, onProgress, ...(prefix ? { prefix } : {}) }),
   getOnlinePlayerCount: () => crossplaySync.getStats().activeSessions.length,
   // Força o servidor a gravar os chunks antes de compactar o mundo
+  // Antes de compactar: pausa a pré-geração, desliga o salvamento automático e grava tudo no disco,
+  // para nenhum arquivo de região ser escrito no meio do tar. Depois religa o salvamento.
   beforeBackup: async () => {
+    await maintenance.holdForBackup().catch(() => {});
+    await sendMcCommand('save-off').catch(() => {});
     await sendMcCommand('save-all flush').catch(() => {});
     await new Promise((r) => setTimeout(r, 8000));
+  },
+  afterBackup: async () => {
+    await sendMcCommand('save-on').catch(() => {});
+    maintenance.releaseBackupHold();
   },
   getBackupFilePath: (name) => files.getBackupFilePath(name),
   getWorldLastModifiedMs: () => files.getWorldLastModifiedMs(),
@@ -707,6 +715,8 @@ const crossplaySync = createCrossplaySyncManager({
 });
 crossplaySync.start();
 maintenance.start();
+// Se o painel caiu no meio de um backup, o salvamento automático pode ter ficado desligado
+setTimeout(() => sendMcCommand('save-on').catch(() => {}), 30000).unref();
 
 async function getCurrentOnlinePlayerNames() {
   const rconList = await fetchOnlinePlayersViaRcon().catch(() => null);
@@ -1152,15 +1162,21 @@ async function handleApi(req, res, url) {
     if (!requireRole('admin')) return;
     const body = await readJsonBody(req, 16 * 1024);
     const radius = body?.radius !== undefined ? Math.max(100, Math.min(5000, Number(body.radius) || 1500)) : undefined;
-    const pregen = maintenance.configurePregen({ enabled: body?.enabled, radius, reset: Boolean(body?.reset) });
-    if (pregen.enabled) maintenance.startOrResumePregen().catch(() => {});
-    else await maintenance.pausePregen('desligada no painel').catch(() => {});
+    const enabled = typeof body?.enabled === 'boolean' ? body.enabled : undefined;
+    const pregen = maintenance.configurePregen({ enabled, radius, reset: body?.reset === true });
+    if (enabled === true) maintenance.startOrResumePregen().catch(() => {});
+    if (enabled === false) await maintenance.pausePregen('desligada no painel').catch(() => {});
     return sendJson(res, 200, { ok: true, pregen });
   }
 
   if (pathname === '/api/config/jvm' && method === 'GET') {
     if (!requireRole('admin')) return;
-    return sendJson(res, 200, { args: jvmArgs.read(), maxHeapMb: 2048, containerLimitMb: 2560 });
+    return sendJson(res, 200, {
+      args: jvmArgs.read(),
+      rejected: jvmArgs.readRejected(),
+      maxHeapMb: 2048,
+      containerLimitMb: 2560,
+    });
   }
 
   if (pathname === '/api/config/jvm' && method === 'PUT') {
@@ -1206,7 +1222,12 @@ async function handleApi(req, res, url) {
         }, 3000);
       };
       try {
-        stopStream = await docker.streamContainerLogs(CONFIG.mcContainerName, {
+        try {
+          stopStream(); // garante que o stream anterior (que terminou) não fique pendurado
+        } catch {
+          // ignore
+        }
+        const stop = await docker.streamContainerLogs(CONFIG.mcContainerName, {
           tail: tailLines,
           onLine: (line) => {
             if (!isConsoleNoise(line)) writeEvent('log', { line, ts: Date.now() });
@@ -1214,6 +1235,12 @@ async function handleApi(req, res, url) {
           onEnd: scheduleRetry,
           onError: scheduleRetry,
         });
+        if (closed) {
+          // o navegador desconectou enquanto o stream abria: fecha na hora
+          stop();
+          return;
+        }
+        stopStream = stop;
         writeEvent('meta', { connected: true, container: CONFIG.mcContainerName });
       } catch {
         scheduleRetry();
