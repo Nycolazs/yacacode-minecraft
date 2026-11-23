@@ -7,7 +7,7 @@ F=/data/.yacacode-jvm-args.txt
 chmod 644 "$F" 2>/dev/null
 
 if [ -s "$F" ]; then
-  if ! java -Xms"${INIT_MEMORY:-1024M}" -Xmx"${MAX_MEMORY:-2048M}" $JVM_XX_OPTS -XX:+UseCompactObjectHeaders @"$F" -version >/tmp/jvm-guard.log 2>&1; then
+  if ! java -XX:+UseG1GC -XX:ActiveProcessorCount=4 -Xms"${INIT_MEMORY:-1024M}" -Xmx"${MAX_MEMORY:-2048M}" $JVM_XX_OPTS -XX:+UseCompactObjectHeaders @"$F" -version >/tmp/jvm-guard.log 2>&1; then
     echo "[YacaCode] Parâmetros da JVM em $F foram recusados pelo Java:"
     sed 's/^/[YacaCode]   /' /tmp/jvm-guard.log | head -5
     mv -f "$F" "$F.invalido"

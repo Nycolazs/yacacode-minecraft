@@ -18,7 +18,8 @@ const ALLOWED = [
   /^-Xss\d+[kKmM]?$/, // pilha das threads
 ];
 // Executam comandos ou trocam classes do Java: nunca
-const FORBIDDEN = /OnError|OnOutOfMemoryError|bootclasspath|agentlib|agentpath|javaagent|^@/i;
+// Use*GC: o server já usa G1 (flags do Aikar); outro coletor impede o boot
+const FORBIDDEN = /OnError|OnOutOfMemoryError|bootclasspath|agentlib|agentpath|javaagent|^@|^-XX:[+-]Use\w*GC$/i;
 
 function toMb(value) {
   const m = String(value).match(/^(\d+)([kKmMgG]?)$/);

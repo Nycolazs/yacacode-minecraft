@@ -1317,7 +1317,7 @@ test('Persona única: mesmo jeito nos 3 canais, permissões por canal e memória
 
 test('JVM: valida parâmetros, limita memória ao container e sempre deixa o @arquivo existindo', async () => {
   const { validateJvmArgs, createJvmArgsStore } = await import('../lib/jvm-args.js');
-  assert.equal(validateJvmArgs('-Xmx2G\n-XX:+UseG1GC').ok, true);
+  assert.equal(validateJvmArgs('-Xmx2G\n-XX:+AlwaysPreTouch').ok, true);
   assert.equal(validateJvmArgs('').ok, true);
   assert.match(validateJvmArgs('-Xmx4G').error, /2048 MB/);
   assert.match(validateJvmArgs('-Xms256M').error, /mínimo/);
@@ -1335,10 +1335,10 @@ test('JVM: valida parâmetros, limita memória ao container e sempre deixa o @ar
     const store = createJvmArgsStore(tmp);
     assert.equal(store.read(), ''); // cria o arquivo vazio
     assert.ok(fs.existsSync(store.file));
-    assert.equal(store.write('-Xmx1536M   -XX:+UseG1GC'), '-Xmx1536M\n-XX:+UseG1GC');
-    assert.equal(fs.readFileSync(store.file, 'utf8'), '-Xmx1536M\n-XX:+UseG1GC\n');
+    assert.equal(store.write('-Xmx1536M   -XX:+AlwaysPreTouch'), '-Xmx1536M\n-XX:+AlwaysPreTouch');
+    assert.equal(fs.readFileSync(store.file, 'utf8'), '-Xmx1536M\n-XX:+AlwaysPreTouch\n');
     assert.throws(() => store.write('-Xmx9G'), /2048 MB/);
-    assert.equal(store.read(), '-Xmx1536M\n-XX:+UseG1GC'); // arquivo anterior intacto
+    assert.equal(store.read(), '-Xmx1536M\n-XX:+AlwaysPreTouch'); // arquivo anterior intacto
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

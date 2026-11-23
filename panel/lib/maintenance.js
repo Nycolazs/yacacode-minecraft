@@ -95,6 +95,7 @@ export function createMaintenanceManager({
       c.pregen.state = 'starting';
     });
     let out;
+    try {
     if (previousState === 'paused') {
       out = await chunky('continue');
       if (/no tasks|nenhuma/i.test(out)) out = null; // tarefa perdida: recomeça (chunks prontos são pulados)
@@ -104,6 +105,13 @@ export function createMaintenanceManager({
       await chunky(`center ${p.centerX} ${p.centerZ}`);
       await chunky(`radius ${p.radius}`);
       out = await chunky('start');
+    }
+    } catch (err) {
+      // RCON fora do ar: volta ao estado anterior para o tick tentar de novo
+      update((c) => {
+        if (c.pregen.state === 'starting') c.pregen.state = previousState === 'idle' ? 'idle' : 'paused';
+      });
+      throw err;
     }
     if (load().pregen.state !== 'starting') {
       // alguém entrou enquanto os comandos rodavam: o join já mudou o estado para "paused"
@@ -224,6 +232,8 @@ export function createMaintenanceManager({
 
   function start(intervalMs = 60 * 1000) {
     stop();
+    // painel pode ter reiniciado no meio de um início
+    if (load().pregen.state === 'starting') update((c) => { c.pregen.state = 'paused'; });
     tickTimer = setInterval(() => tick().catch(() => {}), intervalMs);
     tickTimer.unref?.();
   }

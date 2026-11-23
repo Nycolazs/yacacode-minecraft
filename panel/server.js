@@ -1246,14 +1246,13 @@ async function handleApi(req, res, url) {
         scheduleRetry();
       }
     };
-    await attach(tail);
-
     req.on('close', () => {
       closed = true;
       clearInterval(keepalive);
       if (retryTimer) clearTimeout(retryTimer);
       stopStream();
     });
+    await attach(tail);
     return;
   }
 
