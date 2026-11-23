@@ -82,8 +82,23 @@ export function classifyMinecraftCommand(rawCommand, userRole) {
   }
 
   const parts = clean.split(/\s+/);
-  const root = (parts[0] || '').toLowerCase();
+  // "minecraft:op" e "/op" são o mesmo comando que "op"
+  const root = (parts[0] || '').toLowerCase().replace(/^\/+/, '').replace(/^[a-z0-9_.-]+:/, '');
   const sub = (parts[1] || '').toLowerCase();
+
+  // execute ... run <comando>: vale a regra do comando interno, e sempre exige confirmação
+  // (pode mirar em vários jogadores/entidades de uma vez)
+  if (root === 'execute') {
+    if (!hasRole(userRole, 'moderator')) {
+      return { allowed: false, clean, reason: `Seu cargo "${userRole}" não pode executar "/${clean}".` };
+    }
+    const runMatch = clean.match(/\srun\s+(.+)$/i);
+    if (runMatch) {
+      const inner = classifyMinecraftCommand(runMatch[1], userRole);
+      if (!inner.allowed) return { ...inner, clean };
+    }
+    return { allowed: true, clean, root, isReadOnly: false, requiresConfirmation: true };
+  }
 
   // Permite comandos de consulta pura (ex: list, experience query ..., time query ...)
   const isReadOnly =

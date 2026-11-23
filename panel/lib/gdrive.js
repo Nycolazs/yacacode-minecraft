@@ -753,6 +753,7 @@ export function createGoogleDriveBackupManager({
 
     syncInProgress = true;
     let tempFileToCleanup = null;
+    let worldFrozen = false;
     const startedAt = new Date().toISOString();
     setProgress({
       active: true,
@@ -777,6 +778,11 @@ export function createGoogleDriveBackupManager({
         targetPath = resolved.fullPath;
         targetName = resolved.safeName;
       } else if (createNew) {
+        // Antes de compactar: pausa a pré-geração e desliga o salvamento automático (hook do servidor)
+        if (typeof beforeBackup === 'function') {
+          worldFrozen = true;
+          await beforeBackup().catch(() => {});
+        }
         const created = await createLocalBackup({
           prefix: live ? LIVE_PREFIX : undefined,
           onProgress: ({ fileName: fn, currentBytes, estimatedTotalBytes }) => {
@@ -796,6 +802,11 @@ export function createGoogleDriveBackupManager({
         targetName = created.name;
         if (created.isTemporary) {
           tempFileToCleanup = created.fullPath;
+        }
+        // Compactou: religa o salvamento já, sem esperar o upload para o Drive
+        if (worldFrozen) {
+          worldFrozen = false;
+          await afterBackup?.().catch(() => {});
         }
       } else {
         throw Object.assign(new Error('Informe um arquivo de backup ou solicite criação de novo backup.'), {
@@ -927,6 +938,10 @@ export function createGoogleDriveBackupManager({
       }
       throw err;
     } finally {
+      if (worldFrozen) {
+        worldFrozen = false;
+        await afterBackup?.().catch(() => {});
+      }
       if (tempFileToCleanup) {
         try {
           if (fs.existsSync(tempFileToCleanup)) fs.unlinkSync(tempFileToCleanup);
@@ -1001,7 +1016,6 @@ export function createGoogleDriveBackupManager({
     if (Date.now() - lastLeaveAt < logoutDebounceMs) return false;
     handledLeaveAt = lastLeaveAt;
     try {
-      if (typeof beforeBackup === 'function') await beforeBackup();
       if ((await onlineCount()) > 0) {
         handledLeaveAt = 0; // alguém voltou: faz depois que sair de novo
         return true;
@@ -1011,8 +1025,6 @@ export function createGoogleDriveBackupManager({
       console.log(`[YacaCode Google Drive] Backup pós-logout enviado: ${res.uploaded.name}`);
     } catch (err) {
       console.error(`[YacaCode Google Drive] Falha no backup pós-logout: ${err.message}`);
-    } finally {
-      if (typeof afterBackup === 'function') await afterBackup().catch(() => {});
     }
     return true;
   }
@@ -1043,14 +1055,11 @@ export function createGoogleDriveBackupManager({
     }
 
     try {
-      if (typeof beforeBackup === 'function') await beforeBackup();
       console.log('[YacaCode Google Drive] Iniciando backup agendado para o Google Drive...');
       const res = await syncNow({ createNew: true });
       console.log(`[YacaCode Google Drive] Backup enviado: ${res.uploaded.name} (${res.uploaded.size} bytes)`);
     } catch (err) {
       console.error(`[YacaCode Google Drive] Falha no backup agendado: ${err.message}`);
-    } finally {
-      if (typeof afterBackup === 'function') await afterBackup().catch(() => {});
     }
   }
 

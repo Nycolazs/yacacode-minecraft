@@ -438,6 +438,13 @@ test('AI Assistant: RBAC, confirmação 1-clique para destrutivos e loop Functio
   assert.equal(classifyMinecraftCommand('op Steve', 'moderator').allowed, false);
   assert.equal(classifyMinecraftCommand('op Steve', 'admin').allowed, true);
   assert.equal(classifyMinecraftCommand('op Steve', 'admin').requiresConfirmation, true); // OP via IA exige clique (anti-injeção)
+  // sem atalhos: namespace e execute também passam pela confirmação/permissão
+  assert.equal(classifyMinecraftCommand('minecraft:op Steve', 'admin').requiresConfirmation, true);
+  assert.equal(classifyMinecraftCommand('/op Steve', 'admin').requiresConfirmation, true);
+  assert.equal(classifyMinecraftCommand('execute as @a run op Steve', 'admin').requiresConfirmation, true);
+  assert.equal(classifyMinecraftCommand('execute run time set day', 'moderator').requiresConfirmation, true);
+  assert.equal(classifyMinecraftCommand('execute run time set day', 'viewer').allowed, false);
+  assert.equal(classifyMinecraftCommand('minecraft:time set day', 'moderator').requiresConfirmation, false);
   assert.equal(classifyMinecraftCommand('time set day', 'moderator').requiresConfirmation, false);
   assert.equal(classifyMinecraftCommand('ban Griefer', 'moderator').requiresConfirmation, true);
 
@@ -547,7 +554,9 @@ test('Google Drive Backup: tar.gz sem segredos, OAuth state, upload resumable e 
   let uploadCount = 0;
   let onlinePlayers = 0;
   let saveCalls = 0;
-  let returnDuringSave = false;
+  let afterCalls = 0;
+  let frozen = false;
+  let frozenDuringUpload = null;
 
   const mockFetch = async (url, opts = {}) => {
     const u = String(url);
@@ -588,6 +597,7 @@ test('Google Drive Backup: tar.gz sem segredos, OAuth state, upload resumable e 
       };
     }
     if (u === 'https://mock-upload.googleapis.com/session1' && method === 'PUT') {
+      frozenDuringUpload = frozen;
       const buf = Buffer.from(opts.body);
       uploadedBytesTotal += buf.length;
       if (opts.headers['Content-Range'].startsWith('bytes 0-')) uploadedBytesTotal = buf.length;
@@ -642,7 +652,11 @@ test('Google Drive Backup: tar.gz sem segredos, OAuth state, upload resumable e 
       getOnlinePlayerCount: () => onlinePlayers,
       beforeBackup: async () => {
         saveCalls += 1;
-        if (returnDuringSave) onlinePlayers = 1;
+        frozen = true;
+      },
+      afterBackup: async () => {
+        frozen = false;
+        afterCalls += 1;
       },
       logoutDebounceMs: 50,
       getBackupFilePath: (n) => fm.getBackupFilePath(n),
@@ -710,7 +724,9 @@ test('Google Drive Backup: tar.gz sem segredos, OAuth state, upload resumable e 
     await new Promise((r) => setTimeout(r, 80));
     await gd._runScheduledTickForTest(); // servidor vazio após a espera -> backup pós-logout
     assert.equal(uploadCount, uploads0 + 1);
-    assert.equal(saveCalls, 1);
+    assert.equal(saveCalls, 2); // o backup manual do passo 3 também congela o mundo (corrigido)
+    assert.equal(afterCalls, 2);
+    assert.equal(frozenDuringUpload, false); // salvamento já religado antes do upload
     assert.match(remoteFiles[0].name, /^yacacode-live-/);
     assert.deepEqual(deletedRemoteIds, ['live-old-2']); // retenção separada; agendados intactos
 
@@ -723,13 +739,12 @@ test('Google Drive Backup: tar.gz sem segredos, OAuth state, upload resumable e 
     await gd._runScheduledTickForTest(); // nada pendente
     assert.equal(uploadCount, uploads0 + 2);
 
-    // Alguém volta durante o save-all: cancela e espera a próxima saída
+    // Alguém volta antes do backup começar: não faz e espera a próxima saída
     gd.notifyPlayerLeft();
     await new Promise((r) => setTimeout(r, 80));
-    returnDuringSave = true;
+    onlinePlayers = 1;
     await gd._runScheduledTickForTest();
     assert.equal(uploadCount, uploads0 + 2);
-    returnDuringSave = false;
     onlinePlayers = 0;
     gd.notifyPlayerLeft();
     await new Promise((r) => setTimeout(r, 80));
