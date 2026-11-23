@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { buildPersonaInstruction, rememberExchange } from './persona.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { hasRole } from './auth.js';
@@ -8,14 +9,16 @@ import { hasRole } from './auth.js';
 // ============================================================================
 
 export const AVAILABLE_MODELS = [
-  { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite (Ultra rápido • Recomendado)' },
+  { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash (Mais inteligente • Recomendado)' },
+  { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite (Ultra rápido)' },
   { id: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash-Lite (Ultra rápido)' },
-  { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash (Mais avançado)' },
   { id: 'gemini-flash-lite-latest', label: 'Gemini Flash-Lite Latest (Sempre atualizado)' },
   { id: 'gemini-flash-latest', label: 'Gemini Flash Latest (Sempre atualizado)' },
 ];
 
-const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
+const DEFAULT_MODEL = 'gemini-3.8-flash';
+// Modelo principal (mais inteligente) tenta por pouco tempo; se o Google estiver congestionado cai
+// direto nos Flash-Lite, que respondem em poucos segundos.
 const FALLBACK_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-flash-lite-latest'];
 const DEPRECATED_MODELS = new Set(['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite']);
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
@@ -131,7 +134,7 @@ function buildToolDeclarations(userRole) {
     {
       name: 'get_server_status',
       description:
-        'Obtém o status completo e ao vivo do servidor Minecraft YacaCode: se está online, versão, TPS, jogadores online, uso de RAM/CPU, temperatura do Orange Pi, uptime e endereço de conexão.',
+        'Obtém o status completo e ao vivo do server: se está online, versão, TPS, jogadores online, uso de RAM/CPU, temperatura do Orange Pi, uptime e endereço de conexão.',
       parameters: { type: 'OBJECT', properties: {} },
     },
     {
@@ -231,28 +234,17 @@ function buildToolDeclarations(userRole) {
   return [{ functionDeclarations: decls }];
 }
 
-function buildSystemInstruction({ serverName, mcDomain, mcVersion, username, userRole }) {
-  const roleDesc =
-    userRole === 'admin'
-      ? 'Administrador (acesso total: consultas, comandos de jogo, OP/deop, whitelist, energia e backup)'
-      : userRole === 'moderator'
-      ? 'Moderador (consultas + comandos de jogo/moderação e start/restart; sem OP/deop/stop/backup)'
-      : 'Visualizador (somente leitura: pode consultar status, jogadores, níveis, logs e backups; não pode executar comandos que alterem o servidor)';
-
-  return [
-    `Você é o Assistente IA oficial do servidor Minecraft "${serverName}" (${mcDomain}), integrado ao Painel Admin YacaCode.`,
-    `Engine em produção: Pumpkin (Rust) rodando Minecraft Java ${mcVersion} + Bedrock 1.26.63 cross-play em um Orange Pi Zero 2W (4 GB RAM).`,
-    `Usuário logado agora: "${username}" | Cargo no painel: ${roleDesc}.`,
-    '',
-    'Regras de comportamento:',
-    '1. Responda SEMPRE em Português do Brasil (pt-BR), de forma clara, objetiva, amigável e prática (muitos acessos vêm do celular).',
-    '2. SEMPRE use as ferramentas ao vivo antes de responder sobre quem está online, níveis de XP, vida, coordenadas, status do servidor ou eventos recentes. Nunca chute ou invente dados.',
-    '3. Quando o usuário pedir uma ação no servidor (ex: "deixe de dia", "tira a chuva", "dá op pra X", "manda um aviso no chat", "dá 5 diamantes pra Y"), execute imediatamente via `run_minecraft_command` usando sintaxe padrão do Minecraft (ex: `time set day`, `weather clear`, `op Nome`, `say Mensagem`, `give Nome diamond 5`).',
-    '4. Se uma ferramenta retornar `status: "pending_confirmation"`, informe de forma natural ao usuário que a ação destrutiva foi preparada e está aguardando o clique no botão de confirmação abaixo.',
-    '5. Se o usuário pedir algo acima do cargo dele, explique educadamente a limitação de permissão.',
-    '6. Ao consultar detalhes de um jogador (como nível/XP), prefira usar `get_player_details` ou `list_players` — que combinam consulta ao vivo do console + leitura NBT dos dados do jogador.',
-    '7. Seja conciso: prefira respostas curtas com negrito e listas quando útil.',
-  ].join('\n');
+function buildSystemInstruction({ mcDomain, mcVersion, username, userRole }) {
+  return buildPersonaInstruction({
+    channel: 'panel',
+    username,
+    role: userRole,
+    mcVersion,
+    mcDomain,
+    extra: [
+      'Para nível/XP/vida/posição de um jogador use `get_player_details` ou `list_players` (console ao vivo + dados salvos).',
+    ],
+  });
 }
 
 export function createAiAssistant({
@@ -645,7 +637,7 @@ export function createAiAssistant({
     for (let i = 0; i < candidates.length; i += 1) {
       const candidateModel = candidates[i];
       try {
-        const data = await callSingleGeminiModel(apiKey, candidateModel, payload, i === 0 ? 25000 : 18000);
+        const data = await callSingleGeminiModel(apiKey, candidateModel, payload, i === 0 ? 12000 : 18000);
         return { data, usedModel: candidateModel };
       } catch (err) {
         lastErr = err;
@@ -763,6 +755,12 @@ export function createAiAssistant({
           : 'Concluí as verificações solicitadas.';
     }
 
+    rememberExchange({
+      channel: 'panel',
+      who: session.displayName || session.username,
+      question: cleanMsg,
+      answer: finalReply,
+    });
     return {
       ok: true,
       reply: finalReply,
@@ -861,23 +859,16 @@ export function createAiAssistant({
     const systemInstruction = {
       parts: [
         {
-          text: [
-            `Você se chama "Jorge" e é o assistente amigável do chat global do servidor Minecraft "${serverName}" (Java ${mcVersion} & Bedrock 1.26.63).`,
-            'Regras OBRIGATÓRIAS para o chat dentro do jogo:',
-            '1. Responda SEMPRE em Português do Brasil (pt-BR), de forma natural, descontraída e MUITO curta (máximo 2 a 3 frases curtas, até 320 caracteres no total).',
-            '2. Use APENAS texto puro — NUNCA use markdown (sem **, sem *, sem #, sem crases `, sem listas com quebra de linha).',
-            '3. NUNCA fique cumprimentando toda hora ("Oi!", "Olá!", "E aí!", "Opa!", "Tudo bem?") nem se apresentando de novo. Vá DIRETO ao ponto respondendo o que foi perguntado, mantendo o fio natural da conversa. Só devolva um cumprimento curto se a mensagem do jogador for exclusivamente uma saudação sem pergunta (ex: "oi jorge").',
-            '4. Você pode tirar dúvidas sobre Minecraft (receitas, encantamentos, farms, redstone, poções, mobs, biomas, mecânicas, construção), falar sobre o próprio mundo do servidor (spawn, dificuldade, dia/hora, seed, clima) e informar dados reais dos jogadores (localização X/Y/Z, dimensão, distância até o spawn ou outro jogador, nível de XP, vida, modo de jogo, tempo jogado e estatísticas).',
-            '5. Se a posição do jogador vier do último salvamento do mundo, informe normalmente as coordenadas X, Y, Z e a dimensão.',
-            '6. Você NÃO tem permissão para executar comandos, dar OP, dar itens, mudar hora/clima, teleportar, banir ou alterar nada no servidor. Se pedirem para executar qualquer ação no servidor, recuse educadamente dizendo para usar o Painel Admin.',
-            '7. Se o assunto fugir completamente de Minecraft/jogo/servidor, redirecione de forma simpática dizendo que no chat do jogo você só ajuda com Minecraft e o mundo do servidor.',
-            hasRecentHistory
-              ? 'Obs.: Você JÁ está conversando com a galera no chat agora — continue a conversa naturalmente sem recomeçar nem saudar de novo.'
-              : '',
-            contextBlock,
-          ]
-            .filter(Boolean)
-            .join('\n'),
+          text: buildPersonaInstruction({
+            channel: 'game',
+            mcVersion,
+            mcDomain,
+            extra: [
+              'Você pode passar dados reais dos jogadores (X/Y/Z, dimensão, distância, nível, vida, modo de jogo, tempo jogado) usando o contexto abaixo; se a posição vier do último salvamento, passe normalmente.',
+              hasRecentHistory ? 'Você já está no meio da conversa no chat: continue naturalmente, sem saudar de novo.' : '',
+              contextBlock,
+            ],
+          }),
         },
       ],
     };
@@ -907,6 +898,7 @@ export function createAiAssistant({
       .trim();
 
     if (reply) {
+      rememberExchange({ channel: 'game', who: cleanPlayer, question: cleanQuestion, answer: reply });
       inGameHistory.push({ role: 'user', parts: [{ text: userPrompt }] });
       inGameHistory.push({ role: 'model', parts: [{ text: reply }] });
       if (inGameHistory.length > 20) {

@@ -543,6 +543,11 @@ test('Google Drive Backup: tar.gz sem segredos, OAuth state, upload resumable e 
   ];
   const deletedRemoteIds = [];
   let uploadedBytesTotal = 0;
+  let pendingUploadName = null;
+  let uploadCount = 0;
+  let onlinePlayers = 0;
+  let saveCalls = 0;
+  let returnDuringSave = false;
 
   const mockFetch = async (url, opts = {}) => {
     const u = String(url);
@@ -570,6 +575,11 @@ test('Google Drive Backup: tar.gz sem segredos, OAuth state, upload resumable e 
       };
     }
     if (u.includes('uploadType=resumable')) {
+      try {
+        pendingUploadName = JSON.parse(opts.body).name;
+      } catch {
+        pendingUploadName = null;
+      }
       return {
         ok: true,
         status: 200,
@@ -580,13 +590,15 @@ test('Google Drive Backup: tar.gz sem segredos, OAuth state, upload resumable e 
     if (u === 'https://mock-upload.googleapis.com/session1' && method === 'PUT') {
       const buf = Buffer.from(opts.body);
       uploadedBytesTotal += buf.length;
+      if (opts.headers['Content-Range'].startsWith('bytes 0-')) uploadedBytesTotal = buf.length;
       const range = opts.headers['Content-Range'];
       const m = range.match(/bytes \d+-(\d+)\/(\d+)/);
       const isLast = Number(m[1]) + 1 === Number(m[2]);
       if (!isLast) return { ok: false, status: 308, json: async () => ({}) };
+      uploadCount += 1;
       const created = {
-        id: 'new-file-99',
-        name: 'yacacode-world-test.tar.gz',
+        id: `new-file-${uploadCount}`,
+        name: pendingUploadName || 'yacacode-world-test.tar.gz',
         size: String(uploadedBytesTotal),
         createdTime: '2026-11-19T23:00:00Z',
         webViewLink: 'https://drive.google.com/file/d/new-file-99/view',
@@ -621,8 +633,18 @@ test('Google Drive Backup: tar.gz sem segredos, OAuth state, upload resumable e 
       sessionSecret: 'g'.repeat(64),
       panelDomain: 'painel.yacacode.com',
       fetchImpl: mockFetch,
-      createLocalBackup: () =>
-        fm.createWorldBackupArchive({ destDir: path.join(tmpRoot, 'tmp-upload'), maxLocalBackups: 0 }),
+      createLocalBackup: ({ prefix } = {}) =>
+        fm.createWorldBackupArchive({
+          destDir: path.join(tmpRoot, 'tmp-upload'),
+          maxLocalBackups: 0,
+          ...(prefix ? { prefix } : {}),
+        }),
+      getOnlinePlayerCount: () => onlinePlayers,
+      beforeBackup: async () => {
+        saveCalls += 1;
+        if (returnDuringSave) onlinePlayers = 1;
+      },
+      logoutDebounceMs: 50,
       getBackupFilePath: (n) => fm.getBackupFilePath(n),
       getWorldLastModifiedMs: () => fm.getWorldLastModifiedMs(),
     });
@@ -664,6 +686,55 @@ test('Google Drive Backup: tar.gz sem segredos, OAuth state, upload resumable e 
     assert.equal(fs.readdirSync(path.join(tmpRoot, 'tmp-upload')).length, 0);
     assert.equal(gd.getProgress().stage, 'done');
     assert.equal(gd.getProgress().percent, 100);
+
+    // 4. Nunca faz backup com gente online; faz um logo depois que o último jogador sai
+    const cfgPath = path.join(dataDir, '.yacacode-gdrive-config.json');
+    const writeCfg = (patch) =>
+      fs.writeFileSync(cfgPath, JSON.stringify({ ...JSON.parse(fs.readFileSync(cfgPath, 'utf8')), ...patch }));
+    writeCfg({ liveMaxBackups: 2, scheduleHours: 1, lastBackupAt: null });
+    remoteFiles.push(
+      { id: 'live-old-1', name: 'yacacode-live-20261119-100000.tar.gz', size: '10', createdTime: '2026-11-19T10:00:00Z' },
+      { id: 'live-old-2', name: 'yacacode-live-20261119-090000.tar.gz', size: '10', createdTime: '2026-11-19T09:00:00Z' }
+    );
+    deletedRemoteIds.length = 0;
+    const uploads0 = uploadCount;
+
+    onlinePlayers = 1;
+    await gd._runScheduledTickForTest(); // agendado vencido, mas tem gente jogando -> nada
+    assert.equal(uploadCount, uploads0);
+
+    onlinePlayers = 0;
+    gd.notifyPlayerLeft();
+    await gd._runScheduledTickForTest(); // ainda dentro da espera pós-logout -> nada
+    assert.equal(uploadCount, uploads0);
+    await new Promise((r) => setTimeout(r, 80));
+    await gd._runScheduledTickForTest(); // servidor vazio após a espera -> backup pós-logout
+    assert.equal(uploadCount, uploads0 + 1);
+    assert.equal(saveCalls, 1);
+    assert.match(remoteFiles[0].name, /^yacacode-live-/);
+    assert.deepEqual(deletedRemoteIds, ['live-old-2']); // retenção separada; agendados intactos
+
+    await gd._runScheduledTickForTest(); // mesma saída não gera outro; agendado espera 30 min do pós-logout
+    assert.equal(uploadCount, uploads0 + 1);
+    writeCfg({ lastLiveBackupAt: new Date(Date.now() - 31 * 60 * 1000).toISOString() });
+    await gd._runScheduledTickForTest(); // agendado vencido com servidor vazio -> roda
+    assert.equal(uploadCount, uploads0 + 2);
+    assert.match(remoteFiles[0].name, /^yacacode-world-/);
+    await gd._runScheduledTickForTest(); // nada pendente
+    assert.equal(uploadCount, uploads0 + 2);
+
+    // Alguém volta durante o save-all: cancela e espera a próxima saída
+    gd.notifyPlayerLeft();
+    await new Promise((r) => setTimeout(r, 80));
+    returnDuringSave = true;
+    await gd._runScheduledTickForTest();
+    assert.equal(uploadCount, uploads0 + 2);
+    returnDuringSave = false;
+    onlinePlayers = 0;
+    gd.notifyPlayerLeft();
+    await new Promise((r) => setTimeout(r, 80));
+    await gd._runScheduledTickForTest();
+    assert.equal(uploadCount, uploads0 + 3);
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
@@ -835,6 +906,62 @@ test('Crossplay Sync (Java <-> Bedrock): bloqueio simultâneo e espelhamento com
     const lBedrock = await sync._handleLeaveForTest('.Nycolazs');
     assert.equal(lBedrock.action, 'synced_on_leave');
     assert.equal(fs.readFileSync(path.join(tmpRoot, `world/players/data/${javaUuid}.dat`), 'utf8'), 'BEDROCK_DIAMONDS_POS_V2');
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('Crossplay Sync: 1ª entrada no Bedrock não perde itens quando o servidor salva o perfil vazio no kick', async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'yc-crossplay-race-'));
+  const javaUuid = computeOfflineJavaUuid('Nycolazs');
+  const bedrockUuid = '63406943-fe05-392a-9d89-e98750ac8e6b';
+  const datPath = (u) => path.join(tmpRoot, `world/players/data/${u}.dat`);
+  for (const d of ['data', 'world/players/data', 'world/players/stats', 'world/players/advancements']) {
+    fs.mkdirSync(path.join(tmpRoot, d), { recursive: true });
+  }
+  const writeUsercache = (entries) => fs.writeFileSync(path.join(tmpRoot, 'data/usercache.json'), JSON.stringify(entries));
+  writeUsercache([{ uuid: javaUuid, name: 'Nycolazs' }]);
+  fs.writeFileSync(datPath(javaUuid), 'JAVA_IRON_ARMOR_DIAMOND');
+
+  try {
+    const sync = createCrossplaySyncManager({
+      dataDir: tmpRoot,
+      docker: { isAvailable: () => false },
+      containerName: 'yacacode-mc',
+      // Simula o Pumpkin: ao kickar, grava o estado em memória (jogador novo, inventário vazio)
+      sendMcCommand: async (c) => {
+        if (c.startsWith('kick .Nycolazs')) fs.writeFileSync(datPath(bedrockUuid), 'EMPTY_NEW_PLAYER');
+        return '';
+      },
+      saveSettleDelayMs: 0,
+      firstSyncSettleMs: 5,
+    });
+
+    // Java joga e sai -> perfil canônico com os itens
+    assert.equal((await sync._handleJoinForTest('Nycolazs')).action, 'joined');
+    await sync._handleLeaveForTest('Nycolazs');
+
+    // 1ª entrada no Bedrock: servidor cria perfil vazio
+    writeUsercache([{ uuid: javaUuid, name: 'Nycolazs' }, { uuid: bedrockUuid, name: '.Nycolazs' }]);
+    fs.writeFileSync(datPath(bedrockUuid), 'EMPTY_NEW_PLAYER');
+    assert.equal((await sync._handleJoinForTest('.Nycolazs')).action, 'first_sync_relog');
+
+    // "left" do kick chega DEPOIS do limite de supressão de 15s: mesmo assim não pode propagar o vazio
+    const leave = await sync._handleLeaveForTest('.Nycolazs');
+    assert.equal(leave.action, 'first_sync_completed');
+    assert.equal(fs.readFileSync(datPath(bedrockUuid), 'utf8'), 'JAVA_IRON_ARMOR_DIAMOND');
+    assert.equal(fs.readFileSync(datPath(javaUuid), 'utf8'), 'JAVA_IRON_ARMOR_DIAMOND');
+
+    // Reentra no Bedrock normalmente, joga e sai -> volta para o Java
+    assert.equal((await sync._handleJoinForTest('.Nycolazs')).action, 'joined');
+    fs.writeFileSync(datPath(bedrockUuid), 'BEDROCK_MORE_ITEMS');
+    await sync._handleLeaveForTest('.Nycolazs');
+    assert.equal(fs.readFileSync(datPath(javaUuid), 'utf8'), 'BEDROCK_MORE_ITEMS');
+
+    // Histórico de segurança guarda a versão Java anterior
+    const historyDir = path.join(tmpRoot, 'world/players/.crossplay-canonical/nycolazs/history');
+    const saved = fs.readdirSync(historyDir).map((f) => fs.readFileSync(path.join(historyDir, f), 'utf8'));
+    assert.ok(saved.includes('JAVA_IRON_ARMOR_DIAMOND'));
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
@@ -1072,5 +1199,205 @@ test('Analytics & WhatsApp IA: relatórios de N dias, ranking consolidado Java+B
     analytics.stop();
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('Crossplay Sync: espera o save atrasado do .dat antes de espelhar para a outra edição', async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'yc-crossplay-slow-'));
+  const javaUuid = computeOfflineJavaUuid('Nycolazs');
+  const bedrockUuid = '63406943-fe05-392a-9d89-e98750ac8e6b';
+  const datPath = (u) => path.join(tmpRoot, `world/players/data/${u}.dat`);
+  for (const d of ['data', 'world/players/data']) fs.mkdirSync(path.join(tmpRoot, d), { recursive: true });
+  fs.writeFileSync(
+    path.join(tmpRoot, 'data/usercache.json'),
+    JSON.stringify([{ uuid: javaUuid, name: 'Nycolazs' }, { uuid: bedrockUuid, name: '.Nycolazs' }])
+  );
+  fs.writeFileSync(datPath(javaUuid), 'OLD_SAVE');
+  fs.utimesSync(datPath(javaUuid), new Date(Date.now() - 60000), new Date(Date.now() - 60000));
+  try {
+    const sync = createCrossplaySyncManager({
+      dataDir: tmpRoot,
+      docker: { isAvailable: () => false },
+      containerName: 'yacacode-mc',
+      sendMcCommand: async () => '',
+      saveSettleDelayMs: 50,
+      saveStableMs: 150,
+      saveMaxWaitMs: 3000,
+    });
+    await sync._handleJoinForTest('Nycolazs');
+    setTimeout(() => fs.writeFileSync(datPath(javaUuid), 'NEW_SAVE_WITH_ITEMS'), 400);
+    await sync._handleLeaveForTest('Nycolazs');
+    assert.equal(fs.readFileSync(datPath(bedrockUuid), 'utf8'), 'NEW_SAVE_WITH_ITEMS');
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('Crossplay Sync desligado (Paper + Geyser): só rastreia entradas/saídas, sem kick nem cópia de perfil', async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'yc-crossplay-off-'));
+  fs.mkdirSync(path.join(tmpRoot, 'world/players/data'), { recursive: true });
+  const javaUuid = computeOfflineJavaUuid('Nycolazs');
+  fs.writeFileSync(path.join(tmpRoot, `world/players/data/${javaUuid}.dat`), 'ITENS');
+  const cmds = [];
+  const events = [];
+  try {
+    const sync = createCrossplaySyncManager({
+      dataDir: tmpRoot,
+      docker: { isAvailable: () => false },
+      containerName: 'yacacode-mc',
+      sendMcCommand: async (c) => cmds.push(c),
+      onPlayerEvent: (e) => events.push(`${e.event}:${e.name}`),
+      saveSettleDelayMs: 0,
+      syncEnabled: false,
+    });
+    assert.equal((await sync._handleJoinForTest('Nycolazs')).action, 'joined');
+    assert.equal(sync.getStats().activeSessions.length, 1);
+    assert.equal((await sync._handleLeaveForTest('Nycolazs')).action, 'left');
+    assert.equal(sync.getStats().activeSessions.length, 0);
+    assert.deepEqual(events, ['join:Nycolazs', 'leave:Nycolazs']);
+    assert.deepEqual(cmds, []);
+    assert.equal(fs.existsSync(path.join(tmpRoot, 'world/players/.crossplay-canonical')), false);
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('Persona única: mesmo jeito nos 3 canais, permissões por canal e memória sem vazar conversa privada', async () => {
+  const persona = await import('../lib/persona.js');
+  const { parseMinecraftChatLine: parseChat } = await import('../lib/ingame-chat.js');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'yc-persona-'));
+  let name = 'Jorge';
+  try {
+    persona.configurePersona({ memoryFile: path.join(tmp, 'mem.json'), getBotName: () => name });
+    const panel = persona.buildPersonaInstruction({ channel: 'panel', username: 'nycolas', role: 'admin' });
+    const group = persona.buildPersonaInstruction({ channel: 'whatsapp-group' });
+    const game = persona.buildPersonaInstruction({ channel: 'game' });
+    for (const p of [panel, group, game]) {
+      assert.match(p, /Você é o Jorge/);
+      assert.match(p, /só de "server"/);
+      assert.ok(!/yacacode/i.test(p.replace(/mc\.yacacode\.com/g, '')), 'não pode citar a marca');
+    }
+    assert.match(panel, /PODE agir no server/);
+    assert.match(group, /SÓ conversa/);
+    assert.match(game, /SÓ conversa/);
+    assert.match(game, /texto puro/);
+
+    persona.rememberExchange({ channel: 'panel', who: 'nycolas', question: 'dá op pro Edd', answer: 'Dei op pro Edd.' });
+    persona.rememberExchange({ channel: 'whatsapp-private', who: 'Ana', question: 'segredo', answer: 'ok' });
+    persona.rememberExchange({ channel: 'game', who: 'Edd', question: 'onde fica a vila?', answer: 'Na x=120.' });
+    persona.rememberExchange({ channel: 'whatsapp-group', who: 'Hideruz', question: 'quem tá on?', answer: 'Só o Edd.' });
+
+    const seenByGroup = persona.getVisibleMemory('whatsapp-group').map((m) => m.question);
+    assert.deepEqual(seenByGroup, ['onde fica a vila?']); // nada do painel/privado nem do próprio grupo
+    const seenByGame = persona.getVisibleMemory('game').map((m) => m.question);
+    assert.deepEqual(seenByGame, ['quem tá on?']);
+    const seenByPanel = persona.getVisibleMemory('panel').map((m) => m.question);
+    assert.deepEqual(seenByPanel, ['segredo', 'onde fica a vila?', 'quem tá on?']);
+    assert.match(persona.buildPersonaInstruction({ channel: 'game' }), /Hideruz: "quem tá on\?"/);
+    assert.doesNotMatch(persona.buildPersonaInstruction({ channel: 'game' }), /dá op pro Edd|segredo/);
+
+    // memória persiste em disco e é recarregada
+    persona.configurePersona({ memoryFile: path.join(tmp, 'mem.json'), getBotName: () => name });
+    assert.equal(persona.getVisibleMemory('panel').length, 3);
+
+    // nome configurável vale também no chat do jogo
+    name = 'Zé';
+    assert.deepEqual(parseChat('[10:00:00 INFO]: <Edd> zé cadê a vila?'), { player: 'Edd', question: 'cadê a vila?' });
+    assert.equal(parseChat('[10:00:00 INFO]: <Edd> jorge cadê a vila?'), null);
+    assert.match(persona.buildPersonaInstruction({ channel: 'game' }), /Você é o Zé/);
+  } finally {
+    persona.configurePersona({});
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('JVM: valida parâmetros, limita memória ao container e sempre deixa o @arquivo existindo', async () => {
+  const { validateJvmArgs, createJvmArgsStore } = await import('../lib/jvm-args.js');
+  assert.equal(validateJvmArgs('-Xmx2G\n-XX:+UseG1GC').ok, true);
+  assert.equal(validateJvmArgs('').ok, true);
+  assert.match(validateJvmArgs('-Xmx4G').error, /2048 MB/);
+  assert.match(validateJvmArgs('-Xms256M').error, /mínimo/);
+  assert.match(validateJvmArgs('UseG1GC').error, /começa com "-"/);
+  assert.match(validateJvmArgs('-jar').error, /não é permitido/);
+  assert.match(validateJvmArgs('-javaagent:/x.jar').error, /não é permitido/);
+  assert.match(validateJvmArgs('-Dx=$(id)').error, /caracteres/);
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'yc-jvm-'));
+  try {
+    const store = createJvmArgsStore(tmp);
+    assert.equal(store.read(), ''); // cria o arquivo vazio
+    assert.ok(fs.existsSync(store.file));
+    assert.equal(store.write('-Xmx1536M   -XX:+UseG1GC'), '-Xmx1536M\n-XX:+UseG1GC');
+    assert.equal(fs.readFileSync(store.file, 'utf8'), '-Xmx1536M\n-XX:+UseG1GC\n');
+    assert.throws(() => store.write('-Xmx9G'), /2048 MB/);
+    assert.equal(store.read(), '-Xmx1536M\n-XX:+UseG1GC'); // arquivo anterior intacto
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('Manutenção: pré-geração só com server vazio (pausa/retoma) e reinício diário às 5h se vazio', async () => {
+  const { createMaintenanceManager } = await import('../lib/maintenance.js');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'yc-maint-'));
+  const cmds = [];
+  let players = 0;
+  let restarts = 0;
+  let clock = new Date('2026-11-24T08:00:00Z'); // 05:00 em Fortaleza (UTC-3)
+  try {
+    const m = createMaintenanceManager({
+      configFile: path.join(tmp, 'm.json'),
+      sendCommand: async (c) => {
+        cmds.push(c);
+        return c === 'chunky continue' ? '[Chunky] Task continued' : 'ok';
+      },
+      getOnlineCount: async () => players,
+      getUptimeMs: async () => 10 * 3600 * 1000,
+      restartServer: async () => {
+        restarts += 1;
+      },
+      log: () => {},
+      resumeDelayMs: 20,
+      now: () => clock,
+    });
+    m.configurePregen({ enabled: true, radius: 1500 });
+
+    // com gente online não começa
+    players = 1;
+    assert.equal(await m.startOrResumePregen(), false);
+    // vazio: começa com world/center/radius/start
+    players = 0;
+    assert.equal(await m.startOrResumePregen(), true);
+    assert.deepEqual(cmds.slice(-4), ['chunky world world', 'chunky center 0 0', 'chunky radius 1500', 'chunky start']);
+    assert.equal(m.getStatus().pregen.state, 'running');
+
+    // jogador entra -> pausa; sai -> retoma (continue) depois da espera
+    players = 1;
+    await m.onPlayerJoin();
+    assert.equal(cmds.at(-1), 'chunky pause');
+    assert.equal(m.getStatus().pregen.state, 'paused');
+    players = 0;
+    m.onPlayerLeave();
+    await new Promise((r) => setTimeout(r, 80));
+    assert.equal(cmds.at(-1), 'chunky continue');
+    assert.equal(m.getStatus().pregen.state, 'running');
+
+    // fim da tarefa no log -> done, e não recomeça
+    m.onLogLine('[10:00:00 INFO]: [Chunky] Task finished for minecraft:overworld. Processed: 35000 chunks (100.00%)');
+    assert.equal(m.getStatus().pregen.state, 'done');
+    assert.equal(await m.startOrResumePregen(), false);
+
+    // reinício diário: 05h + vazio + uptime > 6h -> reinicia uma vez só no dia
+    players = 1;
+    assert.equal(await m.maybeDailyRestart(), false);
+    players = 0;
+    assert.equal(await m.maybeDailyRestart(), true);
+    assert.equal(restarts, 1);
+    assert.equal(await m.maybeDailyRestart(), false); // mesmo dia
+    clock = new Date('2026-11-24T15:00:00Z'); // 12h local
+    assert.equal(await m.maybeDailyRestart(), false);
+    clock = new Date('2026-11-25T08:30:00Z'); // 05h30 do dia seguinte
+    assert.equal(await m.maybeDailyRestart(), true);
+    assert.equal(restarts, 2);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
   }
 });

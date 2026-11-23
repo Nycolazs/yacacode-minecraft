@@ -15,6 +15,9 @@ import { createAiAssistant } from './lib/ai.js';
 import { createAiHistoryStore } from './lib/ai-history.js';
 import { createGoogleDriveBackupManager } from './lib/gdrive.js';
 import { createInGameChatBridge } from './lib/ingame-chat.js';
+import { configurePersona, DEFAULT_BOT_NAME } from './lib/persona.js';
+import { createJvmArgsStore, JVM_ARGS_FILENAME } from './lib/jvm-args.js';
+import { createMaintenanceManager } from './lib/maintenance.js';
 import { createCrossplaySyncManager } from './lib/crossplay-sync.js';
 import { createAnalyticsManager } from './lib/analytics.js';
 import { createWhatsAppManager } from './lib/whatsapp.js';
@@ -85,13 +88,20 @@ const gdrive = createGoogleDriveBackupManager({
   panelDomain: CONFIG.panelDomain,
   envClientId: CONFIG.gdriveClientId,
   envClientSecret: CONFIG.gdriveClientSecret,
-  createLocalBackup: ({ onProgress } = {}) =>
-    files.createWorldBackupArchive({ destDir: os.tmpdir(), maxLocalBackups: 0, onProgress }),
+  createLocalBackup: ({ onProgress, prefix } = {}) =>
+    files.createWorldBackupArchive({ destDir: os.tmpdir(), maxLocalBackups: 0, onProgress, ...(prefix ? { prefix } : {}) }),
+  getOnlinePlayerCount: () => crossplaySync.getStats().activeSessions.length,
+  // Força o servidor a gravar os chunks antes de compactar o mundo
+  beforeBackup: async () => {
+    await sendMcCommand('save-all flush').catch(() => {});
+    await new Promise((r) => setTimeout(r, 8000));
+  },
   getBackupFilePath: (name) => files.getBackupFilePath(name),
   getWorldLastModifiedMs: () => files.getWorldLastModifiedMs(),
   onBackupFinished: (evt) => {
     analytics.recordBackupEvent(evt);
-    if (whatsapp) {
+    // Backups pós-logout só notificam no WhatsApp quando falham
+    if (whatsapp && !(evt.live && evt.ok)) {
       whatsapp.notifyBackupResult(evt).catch(() => {});
     }
   },
@@ -226,11 +236,62 @@ async function sendMcCommand(command) {
 }
 
 let cachedTps = { ts: 0, value: null };
+// Linhas que só poluem o console (cada comando RCON abre/fecha uma thread no Paper)
+const CONSOLE_NOISE_RE = /Thread RCON Client .* (started|shutting down)|RCON Listener|\[Rcon: (Unmarked|Marked|Spread)/;
+function isConsoleNoise(line) {
+  return CONSOLE_NOISE_RE.test(String(line || ''));
+}
+
+const jvmArgs = createJvmArgsStore(CONFIG.dataDir);
+try {
+  jvmArgs.ensureFile();
+} catch (err) {
+  console.error(`[YacaCode Panel] Não foi possível criar ${JVM_ARGS_FILENAME}: ${err.message}`);
+}
+
+// Métricas para a lateral do console (cache curto para não abrir RCON a cada requisição)
+let consoleMetricsCache = { ts: 0, value: null };
+async function getConsoleMetrics() {
+  if (consoleMetricsCache.value && Date.now() - consoleMetricsCache.ts < 4000) return consoleMetricsCache.value;
+  const inspect = await docker.inspectContainer(CONFIG.mcContainerName).catch(() => ({ running: false }));
+  const value = { running: Boolean(inspect.running), updatedAt: new Date().toISOString() };
+  if (inspect.running) {
+    const [stats, tpsRaw, msptRaw, listRaw] = await Promise.all([
+      docker.getContainerStats(CONFIG.mcContainerName).catch(() => null),
+      sendMcCommand('tps').catch(() => ''),
+      sendMcCommand('mspt').catch(() => ''),
+      sendMcCommand('list').catch(() => ''),
+    ]);
+    const plain = (s) => stripMinecraftColors(String(s || '')).replace(/\x1b\[[0-9;]*m/g, '');
+    const tps = plain(tpsRaw).match(/(\d+(?:\.\d+)?)\*?,\s*(\d+(?:\.\d+)?)\*?,\s*(\d+(?:\.\d+)?)/);
+    const mspt = [...plain(msptRaw).matchAll(/(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)/g)];
+    const list = plain(listRaw).match(/There are (\d+) of a max of (\d+) players online:?\s*(.*)/);
+    value.tps = tps ? { m1: Number(tps[1]), m5: Number(tps[2]), m15: Number(tps[3]) } : null;
+    // mspt: [5s, 10s, 1m] -> usa a janela de 10s (média e pior)
+    value.mspt = mspt[1] ? { avg: Number(mspt[1][1]), max: Number(mspt[1][3]) } : null;
+    value.players = list
+      ? { online: Number(list[1]), max: Number(list[2]), names: list[3] ? list[3].split(/,\s*/).filter(Boolean) : [] }
+      : null;
+    value.cpuPercent = stats?.cpuPercent ?? null;
+    value.cpuCoresUsed = stats?.cpuCoresUsed ?? null;
+    value.memUsedBytes = stats?.memUsedBytes ?? null;
+    value.memLimitBytes = stats?.memLimitBytes ?? null;
+    value.startedAt = inspect.startedAt || inspect.state?.StartedAt || null;
+  }
+  try {
+    value.tempC = system.getSnapshot()?.temperature?.celsius ?? null;
+  } catch {
+    value.tempC = null;
+  }
+  consoleMetricsCache = { ts: Date.now(), value };
+  return value;
+}
+
 async function fetchTpsViaRcon(playersOnline = 0) {
   const now = Date.now();
   // Se não há jogadores online, evita abrir conexões RCON
   if (playersOnline === 0) {
-    return { tps1m: 20.0, tps5m: 20.0, tps15m: 20.0, raw: '20.0 (Rust Native Engine)' };
+    return { tps1m: 20.0, tps5m: 20.0, tps15m: 20.0, raw: '20.0 (server vazio)' };
   }
   if (cachedTps.value && now - cachedTps.ts < 45000) {
     return cachedTps.value;
@@ -279,8 +340,11 @@ async function fetchOnlinePlayersViaRcon() {
 
 async function collectStackStatus() {
   const names = [
-    { key: 'minecraft', container: CONFIG.mcContainerName, label: 'Minecraft Pumpkin (Rust)' },
-    { key: 'velocity', container: 'yacacode-velocity', label: 'Velocity Proxy (SkinsRestorer)' },
+    {
+      key: 'minecraft',
+      container: CONFIG.mcContainerName,
+      label: IS_PUMPKIN_ENGINE ? 'Minecraft Pumpkin (Rust)' : 'Minecraft Paper 26.3 + Geyser',
+    },
     { key: 'panel', container: 'yacacode-panel', label: 'Painel Admin YacaCode' },
     { key: 'cloudflared', container: CONFIG.cloudflaredContainerName, label: 'Cloudflare Tunnel' },
     { key: 'ddns', container: CONFIG.ddnsContainerName, label: 'Cloudflare DDNS' },
@@ -319,6 +383,11 @@ async function queryLiveXpLevel(playerName) {
 
 const aiHistory = createAiHistoryStore({
   historyFile: path.join(CONFIG.dataDir, '.yacacode-ai-chats.json'),
+});
+
+configurePersona({
+  memoryFile: path.join(CONFIG.dataDir, '.yacacode-ai-shared-memory.json'),
+  getBotName: () => whatsapp?.getBotName?.() || DEFAULT_BOT_NAME,
 });
 
 const ai = createAiAssistant({
@@ -600,8 +669,23 @@ const inGameChat = createInGameChatBridge({
 });
 inGameChat.start();
 
+const IS_PUMPKIN_ENGINE = fs.existsSync(path.join(CONFIG.dataDir, 'pumpkin.toml'));
+
+// Pré-geração do mapa (só com server vazio) + reinício diário às 5h se vazio
+const maintenance = createMaintenanceManager({
+  configFile: path.join(CONFIG.dataDir, '.yacacode-maintenance.json'),
+  sendCommand: (cmd) => sendMcCommand(cmd),
+  getOnlineCount: () => crossplaySync.getStats().activeSessions.length,
+  getUptimeMs: async () => {
+    const info = await docker.inspectContainer(CONFIG.mcContainerName);
+    return info.running && info.startedAt ? Date.now() - new Date(info.startedAt).getTime() : 0;
+  },
+  restartServer: () => docker.controlContainer(CONFIG.mcContainerName, 'restart'),
+});
 const crossplaySync = createCrossplaySyncManager({
   dataDir: CONFIG.dataDir,
+  syncEnabled: IS_PUMPKIN_ENGINE,
+  onRawLine: (line) => maintenance.onLogLine(line),
   docker,
   containerName: CONFIG.mcContainerName,
   sendMcCommand,
@@ -613,12 +697,16 @@ const crossplaySync = createCrossplaySyncManager({
   },
   onPlayerEvent: (evt) => {
     analytics.recordPlayerEvent(evt);
+    if (evt.event === 'leave') gdrive.notifyPlayerLeft();
+    if (evt.event === 'join') maintenance.onPlayerJoin().catch(() => {});
+    if (evt.event === 'leave' && crossplaySync.getStats().activeSessions.length === 0) maintenance.onPlayerLeave();
     if (whatsapp) {
       whatsapp.notifyPlayerEvent(evt).catch(() => {});
     }
   },
 });
 crossplaySync.start();
+maintenance.start();
 
 async function getCurrentOnlinePlayerNames() {
   const rconList = await fetchOnlinePlayersViaRcon().catch(() => null);
@@ -1050,6 +1138,38 @@ async function handleApi(req, res, url) {
     });
   }
 
+  if (pathname === '/api/console/metrics' && method === 'GET') {
+    if (!requireRole('moderator')) return;
+    return sendJson(res, 200, await getConsoleMetrics());
+  }
+
+  if (pathname === '/api/maintenance' && method === 'GET') {
+    if (!requireRole('admin')) return;
+    return sendJson(res, 200, maintenance.getStatus());
+  }
+
+  if (pathname === '/api/maintenance/pregen' && method === 'PUT') {
+    if (!requireRole('admin')) return;
+    const body = await readJsonBody(req, 16 * 1024);
+    const radius = body?.radius !== undefined ? Math.max(100, Math.min(5000, Number(body.radius) || 1500)) : undefined;
+    const pregen = maintenance.configurePregen({ enabled: body?.enabled, radius, reset: Boolean(body?.reset) });
+    if (pregen.enabled) maintenance.startOrResumePregen().catch(() => {});
+    else await maintenance.pausePregen('desligada no painel').catch(() => {});
+    return sendJson(res, 200, { ok: true, pregen });
+  }
+
+  if (pathname === '/api/config/jvm' && method === 'GET') {
+    if (!requireRole('admin')) return;
+    return sendJson(res, 200, { args: jvmArgs.read(), maxHeapMb: 2048, containerLimitMb: 2560 });
+  }
+
+  if (pathname === '/api/config/jvm' && method === 'PUT') {
+    if (!requireRole('admin')) return;
+    const body = await readJsonBody(req, 16 * 1024);
+    const args = jvmArgs.write(body?.args ?? '');
+    return sendJson(res, 200, { ok: true, args, restartRequired: true });
+  }
+
   if (pathname === '/api/console/stream' && method === 'GET') {
     if (!requireRole('moderator')) return;
     const tail = Number(url.searchParams.get('tail')) || 200;
@@ -1066,27 +1186,45 @@ async function handleApi(req, res, url) {
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
 
-    writeEvent('meta', { connected: true, container: CONFIG.mcContainerName });
-
     // Keepalive a cada 20s para manter o stream vivo pelo Cloudflare Tunnel
     const keepalive = setInterval(() => {
       if (!res.writableEnded) res.write(': keepalive\n\n');
     }, 20000);
 
+    // Reconecta sozinho quando o container do Minecraft reinicia (antes o console "congelava").
     let stopStream = () => {};
-    try {
-      stopStream = await docker.streamContainerLogs(CONFIG.mcContainerName, {
-        tail,
-        onLine: (line) => writeEvent('log', { line, ts: Date.now() }),
-        onEnd: () => writeEvent('meta', { ended: true }),
-        onError: (err) => writeEvent('meta', { error: err.message }),
-      });
-    } catch (err) {
-      writeEvent('meta', { error: err.message });
-    }
+    let closed = false;
+    let retryTimer = null;
+    const attach = async (tailLines) => {
+      if (closed) return;
+      const scheduleRetry = () => {
+        if (closed || retryTimer) return;
+        writeEvent('meta', { reconnecting: true });
+        retryTimer = setTimeout(() => {
+          retryTimer = null;
+          attach(0);
+        }, 3000);
+      };
+      try {
+        stopStream = await docker.streamContainerLogs(CONFIG.mcContainerName, {
+          tail: tailLines,
+          onLine: (line) => {
+            if (!isConsoleNoise(line)) writeEvent('log', { line, ts: Date.now() });
+          },
+          onEnd: scheduleRetry,
+          onError: scheduleRetry,
+        });
+        writeEvent('meta', { connected: true, container: CONFIG.mcContainerName });
+      } catch {
+        scheduleRetry();
+      }
+    };
+    await attach(tail);
 
     req.on('close', () => {
+      closed = true;
       clearInterval(keepalive);
+      if (retryTimer) clearTimeout(retryTimer);
       stopStream();
     });
     return;
