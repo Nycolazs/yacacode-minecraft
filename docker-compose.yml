@@ -2,7 +2,7 @@
 # YacaCode Minecraft Server — Stack Profissional 24/7 (Orange Pi 4GB ARM64)
 # ==============================================================================
 # Serviços:
-#   1. minecraft       : PaperMC 26.3 (Java 25) + GeyserMC + Floodgate + Chunky
+#   1. minecraft       : PaperMC 26.3 (Java 25) + GeyserMC (Bedrock) + Chunky
 #   2. panel           : YacaCode Admin Panel (Node 22 Alpine, ~45MB RAM)
 #   3. cloudflared     : Cloudflare Tunnel (expõe o painel com HTTPS Zero Trust)
 #   4. cloudflare-ddns : Atualiza o registro A (DNS Only) do seu domínio no IP público
@@ -17,45 +17,72 @@ x-logging: &default-logging
 
 services:
   # ----------------------------------------------------------------------------
-  # 1. SERVIDOR MINECRAFT EM RUST (Pumpkin 0.2.2+26.3-26.63 — Java 26.3 + Bedrock NetherNet)
-  #    Boot em ~88ms | Consumo ~50-90MB RAM | Nativo ARM64 Multi-thread
+  # 1. SERVIDOR MINECRAFT: PaperMC 26.3 (Java 25) + GeyserMC 2.12.1 (Bedrock, auth offline)
+  #    Java e Bedrock com o mesmo nick são o MESMO jogador (mesmo inventário).
+  #    Plugins ficam fixos em ./minecraft/data/plugins (Geyser-Spigot.jar verificado por SHA-256).
   # ----------------------------------------------------------------------------
   minecraft:
-    build:
-      context: ./minecraft
-      dockerfile: Dockerfile.pumpkin
-    image: yacacode-pumpkin-rust:latest
+    image: itzg/minecraft-server:java25
     container_name: yacacode-mc
     restart: unless-stopped
     tty: false
     stdin_open: true
-    stop_grace_period: 30s
-    mem_limit: ${MC_RUST_MEM_LIMIT:-1536m}
+    stop_grace_period: 90s
+    mem_limit: ${MC_MEM_LIMIT:-2560m}
     ports:
-      # Java 25565/tcp agora é atendida pelo proxy Velocity (yacacode-velocity) na rede interna
-      - "${MC_BEDROCK_PORT:-19132}:19132/udp"    # Minecraft Bedrock (NetherNet ICE WebRTC)
-      - "${MC_BEDROCK_PORT:-19132}:19132/tcp"    # Minecraft Bedrock (NetherNet Signaling)
-      - "7551:7551/udp"                          # Minecraft Bedrock (NetherNet LAN Discovery)
+      - "${MC_JAVA_PORT:-25565}:25565/tcp"       # Minecraft Java Edition
+      - "${MC_BEDROCK_PORT:-19132}:19132/udp"    # Bedrock (Geyser NetherNet/WebRTC)
+      - "${MC_BEDROCK_PORT:-19132}:19132/tcp"    # Bedrock (Geyser signaling)
     environment:
+      EULA: "TRUE"
+      TYPE: "PAPER"
+      VERSION: "${MC_VERSION:-26.3}"
+      PAPER_BUILD: "${MC_PAPER_BUILD:-257}"
       TZ: "${TZ:-America/Fortaleza}"
-      RUST_BACKTRACE: "1"
+      INIT_MEMORY: "${MC_INIT_MEMORY:-1024M}"
+      MAX_MEMORY: "${MC_MAX_MEMORY:-2048M}"
+      USE_AIKAR_FLAGS: "true"
+      # Parâmetros extras editáveis pelo painel (Configurações → JVM); o arquivo é lido a cada início
+      JVM_OPTS: "-XX:+UseCompactObjectHeaders -XX:ActiveProcessorCount=4 @/data/.yacacode-jvm-args.txt"
+      SERVER_NAME: "${SERVER_NAME:-YacaCode}"
+      MOTD: "${MC_MOTD:-\\u00A7a\\u00A7lYacaCode \\u00A78| \\u00A76Minecraft 26.3\\n\\u00A77Java & Bedrock Crossplay \\u00A78\\u2022 \\u00A7ayacacode.com}"
+      ICON: "/assets/server-icon.png"
+      OVERRIDE_ICON: "true"
+      LEVEL: "world"
+      DIFFICULTY: "${MC_DIFFICULTY:-normal}"
+      MODE: "${MC_GAMEMODE:-survival}"
+      MAX_PLAYERS: "${MC_MAX_PLAYERS:-10}"
+      VIEW_DISTANCE: "${MC_PAPER_VIEW_DISTANCE:-12}"
+      SIMULATION_DISTANCE: "${MC_PAPER_SIMULATION_DISTANCE:-6}"
+      PAUSE_WHEN_EMPTY_SECONDS: "${MC_PAUSE_WHEN_EMPTY:-60}"
+      PVP: "${MC_PVP:-true}"
+      ONLINE_MODE: "false"
+      ENFORCE_SECURE_PROFILE: "false"
+      ENABLE_WHITELIST: "false"
+      ENFORCE_WHITELIST: "false"
+      ALLOW_NETHER: "true"
+      ENABLE_COMMAND_BLOCK: "false"
+      SPAWN_PROTECTION: "0"
+      SYNC_CHUNK_WRITES: "false"
+      NETWORK_COMPRESSION_THRESHOLD: "512"
+      ENABLE_RCON: "true"
+      RCON_PORT: "25575"
+      RCON_PASSWORD: "${RCON_PASSWORD:?Defina RCON_PASSWORD no arquivo .env}"
+      ENABLE_QUERY: "false"
     volumes:
       - ./minecraft/data:/data
       - ./minecraft/server-icon.png:/assets/server-icon.png:ro
     networks:
       - yacacode-net
-    healthcheck:
-      test: ["CMD", "mc-health"]
-      start_period: 15s
-      interval: 30s
-      timeout: 5s
-      retries: 3
     logging: *default-logging
 
   # ----------------------------------------------------------------------------
-  # 1A. PROXY VELOCITY 4.3 (SkinsRestorer + Plugins de Proxy na frente do Pumpkin)
+  # 1A. (DESATIVADO) PROXY VELOCITY 4.3 — removido da stack; só sobe com o profile "velocity".
+  #     Para voltar: tirar a porta 25565 do serviço minecraft, ligar networking.proxy.velocity
+  #     no pumpkin.toml e rodar `docker compose --profile velocity up -d velocity`.
   # ----------------------------------------------------------------------------
   velocity:
+    profiles: ["velocity"]
     build:
       context: ./velocity
       dockerfile: Dockerfile
@@ -80,64 +107,28 @@ services:
     logging: *default-logging
 
   # ----------------------------------------------------------------------------
-  # 1B. (OPCIONAL) SERVIDOR PAPER JAVA 25 (Ativável com profile "paper-java")
+  # 1B. (ROLLBACK) PUMPKIN RUST — mundo .pump antigo em ./minecraft/pumpkin-legacy.
+  #     Só sobe com: docker compose stop minecraft && docker compose --profile pumpkin up -d minecraft-pumpkin
   # ----------------------------------------------------------------------------
-  minecraft-paper:
-    image: itzg/minecraft-server:java25
-    container_name: yacacode-mc-paper
-    profiles: ["paper-java"]
+  minecraft-pumpkin:
+    profiles: ["pumpkin"]
+    build:
+      context: ./minecraft
+      dockerfile: Dockerfile.pumpkin
+    image: yacacode-pumpkin-rust:latest
+    container_name: yacacode-mc-pumpkin
     restart: unless-stopped
-    tty: true
     stdin_open: true
-    stop_grace_period: 120s
-    mem_limit: ${MC_MEM_LIMIT:-2560m}
-    memswap_limit: 3584m
+    stop_grace_period: 30s
+    mem_limit: ${MC_RUST_MEM_LIMIT:-1536m}
     ports:
       - "${MC_JAVA_PORT:-25565}:25565/tcp"
       - "${MC_BEDROCK_PORT:-19132}:19132/udp"
       - "${MC_BEDROCK_PORT:-19132}:19132/tcp"
     environment:
-      EULA: "TRUE"
-      TYPE: "PAPER"
-      VERSION: "${MC_VERSION:-26.3}"
       TZ: "${TZ:-America/Fortaleza}"
-      INIT_MEMORY: "${MC_INIT_MEMORY:-1024M}"
-      MAX_MEMORY: "${MC_MAX_MEMORY:-2048M}"
-      USE_AIKAR_FLAGS: "true"
-      JVM_OPTS: "-XX:+UseCompactObjectHeaders -XX:ActiveProcessorCount=4 -Dpaper.playerconnection.keepalive=60"
-      SERVER_NAME: "${SERVER_NAME:-YacaCode}"
-      MOTD: "${MC_MOTD:-\\u00A7a\\u00A7lYacaCode \\u00A78| \\u00A76Minecraft 26.3\\n\\u00A77Java & Bedrock Crossplay \\u00A78\\u2022 \\u00A7ayacacode.com}"
-      ICON: "/assets/server-icon.png"
-      OVERRIDE_ICON: "true"
-      DIFFICULTY: "${MC_DIFFICULTY:-normal}"
-      MODE: "${MC_GAMEMODE:-survival}"
-      MAX_PLAYERS: "${MC_MAX_PLAYERS:-6}"
-      VIEW_DISTANCE: "${MC_VIEW_DISTANCE:-6}"
-      SIMULATION_DISTANCE: "${MC_SIMULATION_DISTANCE:-4}"
-      ENTITY_BROADCAST_RANGE_PERCENTAGE: "75"
-      PAUSE_WHEN_EMPTY_SECONDS: "60"
-      PVP: "${MC_PVP:-true}"
-      ONLINE_MODE: "${MC_ONLINE_MODE:-true}"
-      ENABLE_WHITELIST: "${MC_WHITELIST:-false}"
-      ENFORCE_WHITELIST: "${MC_WHITELIST:-false}"
-      ALLOW_NETHER: "true"
-      SPAWN_PROTECTION: "0"
-      SYNC_CHUNK_WRITES: "false"
-      NETWORK_COMPRESSION_THRESHOLD: "512"
-      MAX_TICK_TIME: "120000"
-      STOP_SERVER_ANNOUNCE_DELAY: "10"
-      STOP_DURATION: "90"
-      ENABLE_RCON: "true"
-      RCON_PORT: "25575"
-      RCON_PASSWORD: "${RCON_PASSWORD:?Defina RCON_PASSWORD no arquivo .env}"
-      ENABLE_QUERY: "false"
-      PLUGINS: |
-        https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot
-        https://download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest/downloads/spigot
-      MODRINTH_PROJECTS: "${MC_MODRINTH_PLUGINS:-chunky}"
-      REMOVE_OLD_MODS: "true"
     volumes:
-      - ./minecraft/data:/data
+      - ./minecraft/pumpkin-legacy:/data
       - ./minecraft/server-icon.png:/assets/server-icon.png:ro
     networks:
       - yacacode-net
