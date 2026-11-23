@@ -89,8 +89,9 @@ export function classifyMinecraftCommand(rawCommand, userRole) {
   // execute ... run <comando>: vale a regra do comando interno, e sempre exige confirmação
   // (pode mirar em vários jogadores/entidades de uma vez)
   if (root === 'execute') {
-    if (!hasRole(userRole, 'moderator')) {
-      return { allowed: false, clean, reason: `Seu cargo "${userRole}" não pode executar "/${clean}".` };
+    // execute aceita aninhar comandos de vários jeitos; só admin usa (e sempre com confirmação)
+    if (!hasRole(userRole, 'admin')) {
+      return { allowed: false, clean, reason: `"/execute" requer cargo Administrador (seu cargo: "${userRole}").` };
     }
     const runMatch = clean.match(/\srun\s+(.+)$/i);
     if (runMatch) {

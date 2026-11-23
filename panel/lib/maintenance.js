@@ -96,16 +96,16 @@ export function createMaintenanceManager({
     });
     let out;
     try {
-    if (previousState === 'paused') {
-      out = await chunky('continue');
-      if (/no tasks|nenhuma/i.test(out)) out = null; // tarefa perdida: recomeça (chunks prontos são pulados)
-    }
-    if (!out) {
-      await chunky(`world ${p.world}`);
-      await chunky(`center ${p.centerX} ${p.centerZ}`);
-      await chunky(`radius ${p.radius}`);
-      out = await chunky('start');
-    }
+      if (previousState === 'paused') {
+        out = await chunky('continue');
+        if (/no tasks|nenhuma/i.test(out)) out = null; // tarefa perdida: recomeça (chunks prontos são pulados)
+      }
+      if (!out) {
+        await chunky(`world ${p.world}`);
+        await chunky(`center ${p.centerX} ${p.centerZ}`);
+        await chunky(`radius ${p.radius}`);
+        out = await chunky('start');
+      }
     } catch (err) {
       // RCON fora do ar: volta ao estado anterior para o tick tentar de novo
       update((c) => {

@@ -442,7 +442,9 @@ test('AI Assistant: RBAC, confirmação 1-clique para destrutivos e loop Functio
   assert.equal(classifyMinecraftCommand('minecraft:op Steve', 'admin').requiresConfirmation, true);
   assert.equal(classifyMinecraftCommand('/op Steve', 'admin').requiresConfirmation, true);
   assert.equal(classifyMinecraftCommand('execute as @a run op Steve', 'admin').requiresConfirmation, true);
-  assert.equal(classifyMinecraftCommand('execute run time set day', 'moderator').requiresConfirmation, true);
+  assert.equal(classifyMinecraftCommand('execute run time set day', 'admin').requiresConfirmation, true);
+  assert.equal(classifyMinecraftCommand('execute run time set day', 'moderator').allowed, false);
+  assert.equal(classifyMinecraftCommand('execute unless entity @e[name="x run say"] run op Steve', 'moderator').allowed, false);
   assert.equal(classifyMinecraftCommand('execute run time set day', 'viewer').allowed, false);
   assert.equal(classifyMinecraftCommand('minecraft:time set day', 'moderator').requiresConfirmation, false);
   assert.equal(classifyMinecraftCommand('time set day', 'moderator').requiresConfirmation, false);
